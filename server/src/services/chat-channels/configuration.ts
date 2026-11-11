@@ -571,7 +571,9 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
     ) {
       throw unprocessable("Unsupported chat endpoint setup action");
     }
-    if (!getWebhookPublicBaseUrl() && endpoint.provider !== "discord" && endpoint.provider !== "imessage-photon" && !(endpoint.provider === "github" && endpoint.setup.github?.cloudRegistrationId)) {
+    // Mattermost receives messages over its WebSocket; only buttons need the
+    // public URL, so it connects without one and posts cards as text.
+    if (!getWebhookPublicBaseUrl() && endpoint.provider !== "discord" && endpoint.provider !== "imessage-photon" && endpoint.provider !== "mattermost" && !(endpoint.provider === "github" && endpoint.setup.github?.cloudRegistrationId)) {
       throw unprocessable(
         `A public HTTPS Paperclip URL is required before connecting ${PROVIDER_LABELS[endpoint.provider]}`,
       );
@@ -890,8 +892,8 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
       if (next.endpoint.provider === "discord")
         await reconcileDiscordCommands(endpoint.id, credentialLease, true);
       await runtimeFor(next.endpoint, {
-        requireDiscordOwnership: next.endpoint.provider === "discord",
-        waitForDiscordOwnership: next.endpoint.provider === "discord",
+        requireDiscordOwnership: leasedChatProvider(next.endpoint.provider),
+        waitForDiscordOwnership: leasedChatProvider(next.endpoint.provider),
       });
 
       if (endpoint.provider === "telegram" && getWebhookPublicBaseUrl()) {
@@ -972,6 +974,25 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
           secretToken: credentials.webhookSecret,
         },
       };
+    if (endpoint.provider === "mattermost") {
+      const webhookBaseUrl = getWebhookPublicBaseUrl();
+      return {
+        provider: "mattermost",
+        userName,
+        maxDownloadBytes: MAX_ATTACHMENT_BYTES,
+        credentials: {
+          baseUrl: credentials.baseUrl,
+          botToken: credentials.botToken,
+          teamId: credentials.teamId,
+          ...(webhookBaseUrl && credentials.callbackSecret
+            ? {
+                callbackUrl: `${webhookBaseUrl}/api/chat-webhooks/${endpoint.publicId}/mattermost`,
+                callbackSecret: credentials.callbackSecret,
+              }
+            : {}),
+        },
+      };
+    }
     if (endpoint.provider === "discord")
       return {
         provider: "discord",

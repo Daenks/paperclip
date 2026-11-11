@@ -929,6 +929,9 @@ importers:
       '@chat-adapter/github':
         specifier: 4.39.0
         version: 4.39.0(patch_hash=x25bk7vvljpm57viwan5qoaddi)(ai@7.0.130(zod@4.6.7))(zod@4.6.7)
+      '@chat-adapter/shared':
+        specifier: 4.39.0
+        version: 4.39.0(ai@7.0.130(zod@4.6.7))(zod@4.6.7)
       '@chat-adapter/slack':
         specifier: 4.39.0
         version: 4.39.0(patch_hash=eskb5kxp7eud5v3ostluhynfoa)(ai@7.0.130(zod@4.6.7))(zod@4.6.7)

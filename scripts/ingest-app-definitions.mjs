@@ -69,6 +69,7 @@ const chatProviderName = (provider) =>
     slack: "Slack",
     telegram: "Telegram",
     "imessage-photon": "iMessage Photon",
+    mattermost: "Mattermost",
   })[provider];
 const channelMethod = (
   provider,
@@ -448,6 +449,36 @@ const apps = [
       {
         register: "https://t.me/BotFather",
         docs: "https://core.telegram.org/bots/tutorial",
+      },
+    ),
+  ],
+  [
+    "mattermost",
+    "Mattermost",
+    "Let people start and continue Paperclip work with an agent from Mattermost.",
+    "communication",
+    "mattermost.com",
+    [],
+    channelMethod(
+      "mattermost",
+      [
+        {
+          ...field("baseUrl", "Mattermost URL", "https://chat.example.com"),
+          type: "text",
+          secret: false,
+        },
+        {
+          ...field("teamId", "Team ID", "26-character team ID"),
+          type: "text",
+          secret: false,
+        },
+        field("botToken", "Bot token", "Paste the bot account's access token"),
+      ],
+      ["channel", "group_chat"],
+      "Create one dedicated bot account (System Console > Integrations > Bot Accounts), add it to one team and the channels it should answer in, then connect your server URL, the team ID, and the bot token. Paperclip receives messages over the bot's WebSocket and starts one thread per root bot mention. Buttons for approvals and questions need Mattermost to reach Paperclip's public chat webhook URL.",
+      {
+        register: "https://docs.mattermost.com/integrations-guide/bot-accounts.html",
+        docs: "https://developers.mattermost.com/integrate/reference/bot-accounts/",
       },
     ),
   ],

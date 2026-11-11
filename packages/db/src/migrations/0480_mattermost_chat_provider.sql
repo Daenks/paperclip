@@ -1,0 +1,5 @@
+-- paperclip:migration-compat online_compatible: Each provider CHECK is replaced by the same list plus 'mattermost', so every row the previous release can write still passes. The drop and re-add share one transaction, so no write sees the column unchecked. Both tables hold one small row per chat endpoint or external principal, so the validation lock is brief.
+ALTER TABLE "chat_endpoints" DROP CONSTRAINT IF EXISTS "chat_endpoints_provider_check";--> statement-breakpoint
+ALTER TABLE "chat_external_principals" DROP CONSTRAINT IF EXISTS "chat_external_principals_provider_check";--> statement-breakpoint
+ALTER TABLE "chat_endpoints" ADD CONSTRAINT "chat_endpoints_provider_check" CHECK ("chat_endpoints"."provider" in ('slack', 'github', 'discord', 'microsoft-teams', 'telegram', 'speko', 'agentmail', 'imessage-photon', 'mattermost'));--> statement-breakpoint
+ALTER TABLE "chat_external_principals" ADD CONSTRAINT "chat_external_principals_provider_check" CHECK ("chat_external_principals"."provider" in ('slack', 'github', 'discord', 'microsoft-teams', 'telegram', 'speko', 'agentmail', 'imessage-photon', 'mattermost'));

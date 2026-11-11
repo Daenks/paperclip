@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "slug": "mattermost",
+  "name": "Mattermost",
+  "description": "Let people start and continue Paperclip work with an agent from Mattermost.",
+  "categories": [
+    "communication"
+  ],
+  "featured": false,
+  "branding": {
+    "logoUrl": "/brands/apps/mattermost.svg",
+    "darkLogoUrl": "/brands/apps/mattermost-dark.svg"
+  },
+  "urlPatterns": [],
+  "methods": [
+    {
+      "key": "chat-agent",
+      "label": "Chat with an agent",
+      "purpose": "channel",
+      "provider": "mattermost",
+      "transport": "chat_sdk",
+      "auth": "api_key",
+      "ownershipModes": [
+        "customer"
+      ],
+      "whenToUse": "Let people in Mattermost start and continue work with one Paperclip agent.",
+      "credentialFields": [
+        {
+          "key": "baseUrl",
+          "label": "Mattermost URL",
+          "type": "text",
+          "required": true,
+          "placeholder": "https://chat.example.com",
+          "secret": false
+        },
+        {
+          "key": "teamId",
+          "label": "Team ID",
+          "type": "text",
+          "required": true,
+          "placeholder": "26-character team ID",
+          "secret": false
+        },
+        {
+          "key": "botToken",
+          "label": "Bot token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Paste the bot account's access token",
+          "secret": true
+        }
+      ],
+      "guidanceMd": "Create one dedicated bot account (System Console > Integrations > Bot Accounts), add it to one team and the channels it should answer in, then connect your server URL, the team ID, and the bot token. Paperclip receives messages over the bot's WebSocket and starts one thread per root bot mention. Buttons for approvals and questions need Mattermost to reach Paperclip's public chat webhook URL.",
+      "consoleLinks": {
+        "register": "https://docs.mattermost.com/integrations-guide/bot-accounts.html",
+        "docs": "https://developers.mattermost.com/integrate/reference/bot-accounts/"
+      },
+      "riskTier": "S3",
+      "requiredResourceFilters": [
+        "channel",
+        "group_chat"
+      ]
+    }
+  ]
+}

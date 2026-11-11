@@ -686,6 +686,12 @@ export function Browse({ renderAccountDetails = (connection) => connection.conne
         description:
           "Chat with agents from Telegram direct messages, groups, and topics.",
       },
+      {
+        slug: "mattermost",
+        name: "Mattermost",
+        description:
+          "Chat with agents from Mattermost channels, threads, and direct messages.",
+      },
     ] as const;
     for (const item of nativeChatApps.filter(item => chatProviderVisible(item.slug, chatConnectorsEnabled, githubEnabled))) {
       if (rowsBySlug.has(item.slug)) continue;
@@ -790,6 +796,7 @@ export function Browse({ renderAccountDetails = (connection) => connection.conne
           "microsoft-teams": "Microsoft Teams",
           telegram: "Telegram",
           "imessage-photon": "iMessage Photon",
+          mattermost: "Mattermost",
   agentmail: "AgentMail",
         } as const;
         target = {

@@ -44,13 +44,21 @@ Those commands change the same opt-in settings that the UI manages.
 ## Chat connectors
 
 **Chat connectors** is off by default. Enable it to connect a dedicated
-Slack, GitHub, Microsoft Teams, Telegram, or Discord bot to one Paperclip
-agent. The experiment shows chat setup, connection management, agent channels,
+Slack, GitHub, Microsoft Teams, Telegram, Discord, or Mattermost bot to one
+Paperclip agent. The experiment shows chat setup, connection management, agent channels,
 and external task controls.
 
 When it is off, existing production tool connectors remain available. For
 example, GitHub opens its normal tool connection flow without asking you to
 choose between chat and tools.
+
+Mattermost connects with a bot account token, the server URL, and one team
+ID. Paperclip receives messages over the bot's WebSocket, so Mattermost does
+not need to reach Paperclip for chat. Buttons for approvals and questions do:
+Mattermost POSTs clicks to `PAPERCLIP_CHAT_WEBHOOK_PUBLIC_URL` (or the
+instance's public URL). If that URL is on a private network, add its host to
+Mattermost's System Console > Environment > Developer > Allow untrusted
+internal connections to. Without a public URL, cards post as text.
 
 This setting controls visibility. Turning it off does not disconnect an
 existing bot or stop its messages. To stop a connection, pause it from its

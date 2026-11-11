@@ -108,6 +108,7 @@ import { createInboundReactions } from "./chat-channels/reactions.js";
 import { createReceiptReactions } from "./chat-channels/receipt-reactions.js";
 import { createDiscordRootThreads } from "./chat-channels/discord/root-threads.js";
 import { createDiscordGatewayEvents } from "./chat-channels/discord/gateway-events.js";
+import { createMattermostReceiverEvents } from "./chat-channels/mattermost/receiver-events.js";
 import { createTeamsFileAuthority } from "./chat-channels/microsoft-teams/file-transfer-authority.js";
 import { createPhotonEvents } from "./chat-channels/imessage-photon/events.js";
 import { createTelegramPublicationDrafts } from "./chat-channels/telegram/publication-drafts.js";
@@ -267,6 +268,7 @@ const REQUIRED_CREDENTIALS: Record<
   discord: ["botToken", "applicationId", "guildId"],
   "microsoft-teams": ["clientId", "tenantId", "clientSecret"],
   telegram: ["botToken"],
+  mattermost: ["baseUrl", "botToken", "teamId"],
 };
 
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set<string>([
@@ -287,6 +289,7 @@ const SUPPLIED_CREDENTIAL_KEYS: Record<ChatProvider, readonly string[]> = {
   discord: ["botToken", "applicationId", "guildId"],
   "microsoft-teams": ["clientId", "tenantId", "clientSecret"],
   telegram: ["botToken"],
+  mattermost: ["baseUrl", "botToken", "teamId"],
 };
 
 const MAX_ERROR_TEXT = 2_000;
@@ -328,6 +331,9 @@ const INGRESS_REORDER_WINDOW_MS: Partial<Record<ChatProvider, number>> = {
   // uses message_id/update_id below to order callbacks within this fixed,
   // non-sliding window without serializing separate chats.
   telegram: 750,
+  // The WebSocket is ordered, but post events are parsed concurrently with
+  // user lookups. Keep the same short window so the drain sorts by post time.
+  mattermost: 750,
 };
 type ResourceRow = typeof chatEndpointResources.$inferSelect;
 
@@ -903,6 +909,7 @@ export function chatChannelService(db: Db, options: ChatChannelServiceOptions) {
   const { handleReaction, processPendingReactionDeliveries } = createInboundReactions(db, { lockCurrentPrincipalAuthorization, runtimeCallbackRecord, runtimeCallbackEndpoint, ensurePrincipal, durableExternalThreadIdentity, recordCurrentMicrosoftTeamsRoute, lifecycleRuntimeFence, deliveryReady, redactError, nonDirectDestinationAllowed, reactionLinkPreflightBarrier: () => options.reactionLinkPreflightBarrier?.() ?? Promise.resolve(), reactionReplayEndpointLockBarrier: () => options.reactionReplayEndpointLockBarrier?.() ?? Promise.resolve(), reactionReplayConversationLockBarrier: () => options.reactionReplayConversationLockBarrier?.() ?? Promise.resolve() });
   const { stageReceiptReaction, addReceiptReaction, processReceiptReaction, processPendingReceiptReactions } = createReceiptReactions(db, { endpointRecord, runtimeContextForRecord, withCredentialMutationLease, runtimeFor, fetchImpl, runtime, runtimeGeneration, credentialFingerprint, redactError, MAX_ERROR_TEXT, receiptReactionTransportBarrier: () => options.receiptReactionTransportBarrier?.() ?? Promise.resolve() });
   const { admitDiscordRootMention, discordRootThreadPending, reconcileDiscordRootThread, promoteDiscordRootReceipt } = createDiscordRootThreads(db, { ensureDiscordGatewayRuntimeIsCurrent, withCredentialMutationLease, runtimeCallbackEndpoint, lockCurrentPrincipalAuthorization, processMessage, redactError, scheduleConversationDrain, lifecycleRuntimeFence, runtimeFor, DISCORD_ROOT_THREAD_CONFIRMATION_DELAY_MS, discordRootThreadTransportBarrier: () => options.discordRootThreadTransportBarrier?.() ?? Promise.resolve() });
+  const { handleMattermostReceiverEvent } = createMattermostReceiverEvents(db, { ensureReceiverRuntimeIsCurrent: ensureDiscordGatewayRuntimeIsCurrent, receiverRuntimeIsCurrent: discordGatewayRuntimeIsCurrent, runtimeCallbackEndpoint, runtimeGeneration });
   const { handleDiscordGatewayEvent } = createDiscordGatewayEvents(db, { ensureDiscordGatewayRuntimeIsCurrent, discordGatewayRuntimeIsCurrent, runtimeCallbackRecord, runtimeCallbackEndpoint, applyProviderLifecycleEffect, runtimeGeneration, discordGatewayEventBarrier: (event) => options.discordGatewayEventBarrier?.(event) ?? Promise.resolve() });
   const { handlePhotonFailure, handlePhotonEvent } = createPhotonEvents(db, { runtimeCallbackRecord, runtimeCallbackEndpoint, invalidateRuntime, ensurePrincipal, requireCurrentExternalActionAuthorization, isExternalActionAuthorizationChange, scheduleMessageProcessing, processPendingPublications, questionResponses, redactError, renewDiscordGatewayOwnershipForMessageAdmission, handleSdkMessage });
   const { handleTelegramGenerationStopped, reserveTelegramPublicationDraft } = createTelegramPublicationDrafts(db, { runtimeCallbackRecord, runtimeCallbackEndpoint, runtimeFor, runtime, runtimeContexts, credentialFingerprint, authorizeRetainedChatSourcePublication });
@@ -1086,6 +1093,10 @@ export function chatChannelService(db: Db, options: ChatChannelServiceOptions) {
                 record.endpoint.provider === "discord"
                   ? (event) => handleDiscordGatewayEvent(event, context)
                   : undefined,
+              onMattermostReceiverEvent:
+                record.endpoint.provider === "mattermost"
+                  ? (event) => handleMattermostReceiverEvent(event, context)
+                  : undefined,
               onAction:
                 record.endpoint.capabilities.actions === true
                   ? (event) => handleAction(event, context)
@@ -1226,7 +1237,7 @@ export function chatChannelService(db: Db, options: ChatChannelServiceOptions) {
       )
       .where(
         and(
-          inArray(chatEndpoints.provider, ["discord", "imessage-photon"]),
+          inArray(chatEndpoints.provider, ["discord", "imessage-photon", "mattermost"]),
           inArray(chatEndpoints.status, ["verifying", "active", "attention"]),
           eq(toolConnections.status, "active"),
           eq(toolConnections.enabled, true),
@@ -1832,12 +1843,13 @@ export function chatChannelService(db: Db, options: ChatChannelServiceOptions) {
         principalAllowed &&
         activationAllowed;
       const isPlausibleOrphanFollowUp =
-        endpoint.provider === "github" || endpoint.provider === "discord" ||
+        endpoint.provider === "github" || endpoint.provider === "discord" || endpoint.provider === "mattermost" ||
         (endpoint.provider === "slack" && slackOrphanFollowUp(thread.id, message.id)) ||
         (endpoint.provider === "microsoft-teams" && teamsOrphanFollowUp(thread.id, message.id));
       const setupDestinationCanBeEnabledByEarlierMention =
         (endpoint.provider === "github" ||
           endpoint.provider === "discord" ||
+          endpoint.provider === "mattermost" ||
           (endpoint.provider === "microsoft-teams" &&
             teamsRootMentionCanEnableSetupDestination(resource))) &&
         !thread.isDM &&
@@ -2706,7 +2718,7 @@ export function chatChannelService(db: Db, options: ChatChannelServiceOptions) {
       slackSlashControl?: boolean;
     } = {},
   ) {
-    if (event.provider === "discord" && !(await admitDiscordSdkMessage(
+    if ((event.provider === "discord" || event.provider === "mattermost") && !(await admitDiscordSdkMessage(
       event.endpointId,
       runtimeContext,
       {

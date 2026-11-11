@@ -88,6 +88,7 @@ const providerNames: Record<ChatProvider, string> = {
   "microsoft-teams": "Microsoft Teams",
   telegram: "Telegram",
   "imessage-photon": "iMessage Photon",
+  mattermost: "Mattermost",
 };
 
 const providerLifecycleGuidance: Record<
@@ -126,6 +127,12 @@ const providerLifecycleGuidance: Record<
   "imessage-photon": {
     reconnect: "Reconnect verifies the same Photon project and line allocation, then recovers eligible missed messages.",
     remove: "Disconnect archives this channel and removes its saved secret. Your Photon project, number, subscription, and Messages history remain in Photon.",
+  },
+  mattermost: {
+    reconnect:
+      "Reconnect verifies this same Mattermost bot account and team. It does not add or remove the bot from teams or channels.",
+    remove:
+      "Paperclip archives the endpoint, closes its WebSocket connection, and retires its saved bot token. The bot account and its channel memberships remain until you remove them in Mattermost.",
   },
   telegram: {
     reconnect:

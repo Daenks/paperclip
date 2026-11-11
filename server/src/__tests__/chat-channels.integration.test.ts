@@ -19922,6 +19922,131 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
     await service.shutdown();
   });
 
+  it("configures a Mattermost bot, owns its WebSocket lease, and starts a task from a channel mention", async () => {
+    const fixture = await seedCompany();
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 20);
+    const botId = `b${suffix}bbbbb`;
+    const teamId = "t".repeat(26);
+    const channelId = "c".repeat(26);
+    const rootPostId = "p".repeat(26);
+    const providerFetch = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          "Bearer mattermost-secret",
+        );
+        const url = new URL(String(input));
+        expect(url.origin).toBe("https://chat.example.com");
+        const responses: Record<string, unknown> = {
+          "/api/v4/users/me": { id: botId, username: "maya", nickname: "Maya", is_bot: true },
+          [`/api/v4/teams/${teamId}`]: { id: teamId, name: "eng", display_name: "Engineering" },
+          [`/api/v4/teams/${teamId}/members/${botId}`]: { team_id: teamId, user_id: botId },
+          [`/api/v4/users/me/teams/${teamId}/channels`]: [
+            { id: channelId, type: "O", team_id: teamId, name: "agent-lab", display_name: "Agent Lab" },
+            { id: "d".repeat(26), type: "D", team_id: "", name: "dm", display_name: "" },
+          ],
+        };
+        return new Response(JSON.stringify(responses[url.pathname]), {
+          status: url.pathname in responses ? 200 : 404,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    ) as unknown as typeof globalThis.fetch;
+    const { runtime, service, wakeup } = createService(new FakeChatSdkRuntime(), providerFetch);
+    try {
+      const endpoint = await service.create(
+        fixture.companyId,
+        { provider: "mattermost", assignedAgentId: fixture.assignedAgentId },
+        "owner-user",
+      );
+      const configured = await service.configure(
+        endpoint.id,
+        {
+          action: "configure",
+          credentials: {
+            baseUrl: "https://chat.example.com/",
+            botToken: "mattermost-secret",
+            teamId,
+          },
+        },
+        "owner-user",
+      );
+      expect(configured).toMatchObject({
+        provider: "mattermost",
+        providerAccountId: teamId,
+        providerAccountLabel: "Engineering",
+        botExternalId: botId,
+        botUsername: "maya",
+        status: "verifying",
+        setup: { step: "test" },
+      });
+      await expect(service.listResources(endpoint.id)).resolves.toEqual([
+        expect.objectContaining({
+          providerResourceId: channelId,
+          parentProviderResourceId: teamId,
+          label: "~agent-lab",
+          enabled: false,
+        }),
+      ]);
+      const configuration = runtime.configurations.get(endpoint.id);
+      expect(configuration?.enableDiscordGateway).toBe(true);
+      expect(configuration?.callbacks.onMattermostReceiverEvent).toBeTypeOf("function");
+      expect(configuration?.providerConfig).toMatchObject({
+        provider: "mattermost",
+        credentials: {
+          baseUrl: "https://chat.example.com",
+          botToken: "mattermost-secret",
+          teamId,
+          callbackUrl: `https://paperclip.example/api/chat-webhooks/${endpoint.publicId}/mattermost`,
+          callbackSecret: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      });
+      const connection = await db
+        .select({ refs: toolConnections.credentialSecretRefs })
+        .from(toolConnections)
+        .where(eq(toolConnections.id, endpoint.connectionId))
+        .then((rows) => rows[0]!);
+      expect(connection.refs).toHaveLength(4);
+      expect(JSON.stringify(connection)).not.toContain("mattermost-secret");
+
+      const callbacks = configuration!.callbacks;
+      const threadId = `mattermost:c:${channelId}:${rootPostId}`;
+      const thread = makeThread({ channelId: `mattermost:c:${channelId}`, id: threadId, name: "Agent Lab" });
+      await deliverMessage({
+        callbacks,
+        endpointId: endpoint.id,
+        provider: "mattermost",
+        thread: thread.thread,
+        message: makeMessage({
+          id: rootPostId,
+          text: "@maya summarize the deploy",
+          mentioned: true,
+          userId: "u".repeat(26),
+          raw: { paperclip_channel_kind: "c", paperclip_team_id: teamId },
+        }),
+        trigger: "mention",
+      });
+      const [delivery] = await db
+        .select({ id: chatDeliveries.id })
+        .from(chatDeliveries)
+        .where(
+          and(
+            eq(chatDeliveries.endpointId, endpoint.id),
+            eq(chatDeliveries.providerEventId, `${threadId}:${rootPostId}`),
+          ),
+        );
+      if (!delivery) throw new Error("Expected Mattermost delivery");
+      await service.processPendingDeliveries(25, delivery.id);
+      const [conversation] = await service.listConversations(endpoint.id);
+      expect(conversation).toMatchObject({ externalThreadId: threadId });
+      await expect(service.listResources(endpoint.id)).resolves.toEqual([
+        expect.objectContaining({ providerResourceId: channelId, enabled: true }),
+      ]);
+      expect(wakeup).toHaveBeenCalled();
+    } finally {
+      await service.shutdown();
+    }
+  });
+
   it("allows only one concurrent live endpoint to claim a Discord bot across guilds", async () => {
     const fixture = await seedCompany();
     const applicationId = "623456789012345678";

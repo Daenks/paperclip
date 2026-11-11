@@ -42,6 +42,8 @@ function providerResourceType(
   // operator grants access to the chat once rather than having to rediscover
   // and enable every topic independently.
   if (provider === "telegram") return "chat";
+  if (provider === "mattermost")
+    return surfaceKind === "linear_group" ? "group_chat" : "channel";
   return "channel";
 }
 
@@ -87,6 +89,8 @@ function canonicalProviderResourceId(
   }
   if (provider === "telegram")
     return thread.channelId.replace(/^telegram:/, "");
+  if (provider === "mattermost")
+    return thread.channelId.replace(/^mattermost:[cdg]:/, "");
   return thread.channelId;
 }
 
@@ -131,6 +135,9 @@ function chatSurfaceKind(
       ? "native_thread"
       : "linear_group";
   }
+  // A group chat is one resource gated by the group-chat toggle, like Teams.
+  if (provider === "mattermost")
+    return thread.id.startsWith("mattermost:g:") ? "linear_group" : "native_thread";
   return "native_thread";
 }
 
@@ -146,7 +153,7 @@ function nonDirectDestinationAllowed(
 ): boolean {
   if (!resource || resource.availability !== "available") return false;
   if (
-    endpoint.provider === "microsoft-teams" &&
+    (endpoint.provider === "microsoft-teams" || endpoint.provider === "mattermost") &&
     resource.type === "group_chat"
   ) {
     return endpoint.allowGroupChats;

@@ -349,7 +349,7 @@ export async function enqueueIssueInteractionChatPublications(
         }))
       : [];
     const confirmation =
-      !requiresBoard && (endpoint.provider === "telegram" || endpoint.provider === "slack") && endpoint.capabilities.actions === true
+      !requiresBoard && (endpoint.provider === "telegram" || endpoint.provider === "slack" || endpoint.provider === "mattermost") && endpoint.capabilities.actions === true
         ? nativeChatConfirmation(interaction) ?? checklist
         : null;
     const confirmationActionTokens = confirmation || suggestions || connectionDecline

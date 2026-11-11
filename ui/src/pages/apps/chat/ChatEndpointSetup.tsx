@@ -66,6 +66,7 @@ const providerNames: Record<ChatProvider, string> = {
   "microsoft-teams": "Microsoft Teams",
   telegram: "Telegram",
   "imessage-photon": "iMessage Photon",
+  mattermost: "Mattermost",
 };
 
 const knownProviders = new Set(Object.keys(providerNames));
@@ -1014,6 +1015,68 @@ function ProviderConnectStep({
       </div>
     );
   }
+  if (provider === "mattermost")
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-xl font-bold">Connect {agentName} to Mattermost</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {repairing
+              ? "Reconnect verifies this same Mattermost bot account and team. Leave fields blank to reuse saved credentials."
+              : "Create one dedicated Mattermost bot account for this Paperclip agent."}
+          </p>
+        </div>
+        <ol className="list-decimal space-y-2 pl-5 text-sm">
+          <li>
+            In System Console, open Integrations &gt; Bot Accounts and create a
+            bot. Copy its access token.
+          </li>
+          <li>
+            Add the bot to the team, then to each channel it should answer in.
+          </li>
+          <li>
+            Copy the team ID (System Console &gt; Teams, or
+            <code> /api/v4/teams/name/&lt;team-name&gt;</code>).
+          </li>
+        </ol>
+        {field("baseUrl", "Mattermost URL", "url")}
+        {field("teamId", "Team ID", "text")}
+        {field("botToken", "Bot token")}
+        <p className="text-sm text-muted-foreground">
+          Paperclip receives messages over the bot&apos;s WebSocket, so
+          Mattermost does not need to reach Paperclip for chat. Buttons for
+          approvals and questions need Mattermost to reach Paperclip&apos;s
+          public chat webhook URL
+          {endpoint.setup?.webhookUrl ? (
+            <>
+              {" "}(<code>{endpoint.setup.webhookUrl}</code>). If that host
+              is on a private network, add it to System Console &gt;
+              Environment &gt; Developer &gt; Allow untrusted internal
+              connections to.
+            </>
+          ) : (
+            <>. Set PAPERCLIP_CHAT_WEBHOOK_PUBLIC_URL to enable them; until then cards post as text.</>
+          )}{" "}
+          Paperclip still requires each discovered channel to be enabled in
+          Access.
+        </p>
+        <Button
+          disabled={
+            (!repairing &&
+              (!credentials.baseUrl ||
+                !credentials.teamId ||
+                !credentials.botToken)) ||
+            pending
+          }
+          onClick={() =>
+            onAction(repairing ? "reconnect" : "configure", credentials)
+          }
+        >
+          {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {repairing ? "Reconnect Mattermost bot" : "Connect Mattermost bot"}
+        </Button>
+      </div>
+    );
   if (provider === "telegram")
     return (
       <div className="space-y-5">
@@ -1883,7 +1946,13 @@ function TryStep({
       "Link the discovered sender to a Paperclip person in Access, then send a fresh request.",
       "Wait for the agent’s actual reply. Setup completes after that reply is delivered.",
       ...(photonAllocation === "shared" ? ["This Pro-compatible channel supports DMs only. Group messages cannot start work."] : ["For a group: add the number in Messages, send a message, enable the discovered group in Settings, then send a fresh request."]),
-    ] : provider === "discord"
+    ] : provider === "mattermost"
+      ? [
+          "Open a channel the bot is a member of.",
+          `Mention ${botMention} in a new message.`,
+          `Reply once in the thread under ${agentName}'s answer.`,
+        ]
+    : provider === "discord"
       ? [
           "Open a text channel where the bot is installed.",
           `Mention ${botMention} in a new root message.`,

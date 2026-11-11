@@ -333,6 +333,13 @@
       "darkAsset": "/brands/apps/mixpanel-dark.svg"
     },
     {
+      "slug": "mattermost",
+      "provider": "Mattermost",
+      "catalogVisible": true,
+      "localAsset": "/brands/apps/mattermost.svg",
+      "darkAsset": "/brands/apps/mattermost-dark.svg"
+    },
+    {
       "slug": "microsoft-teams",
       "provider": "Microsoft Teams",
       "catalogVisible": true,

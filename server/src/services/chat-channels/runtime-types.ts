@@ -113,7 +113,7 @@ export type DiscordGatewayOwnership = {
   context: RuntimeContext;
   endpointId: string;
   expiresAt: Date;
-  leaseKey: "discord_gateway_runtime" | "photon_receiver_runtime";
+  leaseKey: "discord_gateway_runtime" | "photon_receiver_runtime" | "mattermost_websocket_runtime";
   renewTimer: ReturnType<typeof setInterval> | null;
   renewal: Promise<void> | null;
   stopPromise: Promise<void> | null;

@@ -6,6 +6,11 @@ import type { VerifiedProviderIdentity } from "./runtime-types.js";
 import { verifySlackCredentials } from "./slack/credentials.js";
 import { verifyDiscordCredentials } from "./discord/credentials.js";
 import { verifyTelegramCredentials } from "./telegram/credentials.js";
+import {
+  normalizeMattermostCredentials,
+  prepareMattermostInventory,
+  verifyMattermostCredentials,
+} from "./mattermost/credentials.js";
 import { verifyGitHubCredentials } from "./github/credentials.js";
 import { verifySpekoCredentials } from "./speko/credentials.js";
 import { verifyTeamsCredentials } from "./microsoft-teams/credentials.js";
@@ -103,6 +108,11 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
     if (endpoint.provider === "telegram" && !values.webhookSecret) {
       values.webhookSecret = randomBytes(32).toString("hex");
     }
+    if (endpoint.provider === "mattermost") {
+      // Signs interactive-button context; never shown to or typed by people.
+      if (!values.callbackSecret) values.callbackSecret = randomBytes(32).toString("hex");
+      Object.assign(values, normalizeMattermostCredentials(values));
+    }
     const required =
       endpoint.provider === "github"
         ? ["appId", "privateKey", "webhookSecret"]
@@ -126,6 +136,7 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
     if (provider === "slack") return verifySlackCredentials(credentials, fetchImpl, PROVIDER_CREDENTIAL_CHECK_TIMEOUT_MS);
     if (provider === "discord") return verifyDiscordCredentials(credentials, fetchImpl, redactError);
     if (provider === "telegram") return verifyTelegramCredentials(credentials, fetchImpl, PROVIDER_CREDENTIAL_CHECK_TIMEOUT_MS);
+    if (provider === "mattermost") return verifyMattermostCredentials(credentials, fetchImpl, redactError);
     if (provider === "github") return verifyGitHubCredentials(credentials, fetchImpl, PROVIDER_CREDENTIAL_CHECK_TIMEOUT_MS);
     if (provider === "speko") return verifySpekoCredentials(credentials, fetchImpl);
     return verifyTeamsCredentials(credentials, fetchImpl, PROVIDER_CREDENTIAL_CHECK_TIMEOUT_MS);
@@ -137,7 +148,7 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
   ): string | null {
     const account = identity.providerAccountId?.trim().toLowerCase();
     const bot = identity.botExternalId?.trim().toLowerCase();
-    if (provider === "github" || provider === "discord") {
+    if (provider === "github" || provider === "discord" || provider === "mattermost") {
       if (bot) return `${provider}:app:${bot}`;
       return null;
     }
@@ -151,6 +162,7 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
     return (
       provider === "github" ||
       provider === "discord" ||
+      provider === "mattermost" ||
       provider === "microsoft-teams" || provider === "imessage-photon"
     );
   }
@@ -554,6 +566,7 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
       if (endpoint.provider === "slack") return await prepareSlackInventory(credentials, fetchImpl);
       if (endpoint.provider === "github") return await prepareGitHubInventory(credentials, fetchImpl);
       if (endpoint.provider === "discord") return await prepareDiscordInventory(credentials, fetchImpl);
+      if (endpoint.provider === "mattermost") return await prepareMattermostInventory(credentials, fetchImpl);
       return { credentials, inventory: null };
     } catch (error) {
       throw unprocessable(redactError(error), {

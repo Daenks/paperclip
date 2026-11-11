@@ -510,5 +510,9 @@ export function parseChatProviderLifecycle(
       return parseTeamsLifecycle(input);
     case "telegram":
       return parseTelegramLifecycle(input);
+    case "mattermost":
+      // Mattermost posts only button clicks to the webhook; membership comes
+      // from the REST inventory on connect and reconnect.
+      return [];
   }
 }

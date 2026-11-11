@@ -80,7 +80,7 @@ const support = external ? { supported: true } : await getEmbeddedPostgresTestSu
     const failed = await endpoint({ status: "attention" }); await db.update(toolConnections).set({ healthStatus: "failed" }).where(eq(toolConnections.id, failed.connectionId));
     await start(); await settled(); await quiet(); expect(reconcile).not.toHaveBeenCalled();
   });
-  it.each(["discord", "imessage-photon"] as const)("wakes the first %s receiver and retains its identity until removal", async provider => {
+  it.each(["discord", "imessage-photon", "mattermost"] as const)("wakes the first %s receiver and retains its identity until removal", async provider => {
     await start(); await settled(); await quiet();
     const row = await endpoint({ provider }); await settled();
     expect(reconcile).toHaveBeenCalledWith(row.id); await quiet();

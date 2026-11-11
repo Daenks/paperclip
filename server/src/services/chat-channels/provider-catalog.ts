@@ -12,6 +12,7 @@ const PROVIDER_LABELS: Record<ChatProvider, string> = {
   discord: "Discord",
   "microsoft-teams": "Microsoft Teams",
   telegram: "Telegram",
+  mattermost: "Mattermost",
 };
 
 const CAPABILITIES: Record<ChatProvider, ChatAdapterCapabilities> = {
@@ -98,6 +99,23 @@ const CAPABILITIES: Record<ChatProvider, ChatAdapterCapabilities> = {
     reactions: true,
     files: true,
     cards: true,
+    actions: true,
+    modals: false,
+    slashCommands: false,
+    ephemeralMessages: false,
+    proactiveDirectMessages: false,
+  },
+  mattermost: {
+    threads: true,
+    directMessages: true,
+    nativeStreaming: false,
+    messageEdits: true,
+    messageDeletes: true,
+    reactions: true,
+    files: true,
+    cards: true,
+    // Buttons arrive through the public chat webhook. Without
+    // PAPERCLIP_CHAT_WEBHOOK_PUBLIC_URL the adapter posts cards as text.
     actions: true,
     modals: false,
     slashCommands: false,

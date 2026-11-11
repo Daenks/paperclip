@@ -133,6 +133,9 @@ function providerSetupState(
           : "https://t.me/BotFather",
         webhookUrl,
       } as const;
+    case "mattermost":
+      // The button-callback URL. Messages use the bot's WebSocket instead.
+      return { step, webhookUrl } as const;
   }
 }
 

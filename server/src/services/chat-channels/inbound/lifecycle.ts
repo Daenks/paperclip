@@ -1015,7 +1015,7 @@ export function createChatMessageLifecycle(db: Db, options: MessageLifecycleOpti
     runtimeContext: RuntimeContext,
   ) {
     if (
-      event.provider === "discord" &&
+      (event.provider === "discord" || event.provider === "mattermost") &&
       !(await ensureDiscordGatewayRuntimeIsCurrent(
         event.endpointId,
         runtimeContext,
@@ -1060,7 +1060,7 @@ export function createChatMessageLifecycle(db: Db, options: MessageLifecycleOpti
     runtimeContext: RuntimeContext,
   ) {
     if (
-      event.provider === "discord" &&
+      (event.provider === "discord" || event.provider === "mattermost") &&
       !(await ensureDiscordGatewayRuntimeIsCurrent(
         event.endpointId,
         runtimeContext,

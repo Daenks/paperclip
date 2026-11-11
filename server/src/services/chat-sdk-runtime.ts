@@ -3,6 +3,11 @@ import { PhotonChatAdapter, parsePhotonThreadId } from "./photon/adapter.js";
 import { PhotonLineAuthentication } from "./photon/cloud.js";
 import { PhotonState } from "./photon/state.js";
 import { PhotonReceiver } from "./photon/receiver.js";
+import {
+  createMattermostAdapter,
+  MattermostAdapter,
+  type MattermostReceiverEvent,
+} from "./chat-mattermost.js";
 import { photonAttachmentLocator, photonAttachmentLocatorSchema, downloadPhotonAttachment, type PhotonAttachmentLocator } from "./photon/attachments.js";
 import type { LiveEvent as PhotonEvent } from "@photon-ai/advanced-imessage";
 import {
@@ -137,8 +142,8 @@ const DISCORD_GATEWAY_HEALTHY_SESSION_MS = 60_000;
 
 /** Public Paperclip provider ids. The Teams SDK name remains an internal detail. */
 export type ChatSdkProvider =
-  "slack" | "github" | "discord" | "microsoft-teams" | "telegram" | "imessage-photon";
-type ChatSdkAdapterKey = "slack" | "github" | "discord" | "teams" | "telegram" | "imessage-photon";
+  "slack" | "github" | "discord" | "microsoft-teams" | "telegram" | "imessage-photon" | "mattermost";
+type ChatSdkAdapterKey = "slack" | "github" | "discord" | "teams" | "telegram" | "imessage-photon" | "mattermost";
 
 interface ProviderConfigBase {
   /** Agent-derived native bot display/mention name. */
@@ -207,6 +212,19 @@ export interface ResolvedTelegramChatConfig extends ProviderConfigBase {
   };
 }
 
+export interface ResolvedMattermostChatConfig extends ProviderConfigBase {
+  provider: "mattermost";
+  maxDownloadBytes?: number;
+  credentials: {
+    baseUrl: string;
+    botToken: string;
+    teamId: string;
+    /** Public button-callback URL; omitted when Paperclip has no webhook base URL. */
+    callbackUrl?: string;
+    callbackSecret?: string;
+  };
+}
+
 export interface ResolvedPhotonChatConfig extends ProviderConfigBase {
   provider: "imessage-photon";
   intakeAfter: number;
@@ -218,7 +236,8 @@ export type ResolvedChatSdkProviderConfig =
   | ResolvedGitHubChatConfig
   | ResolvedDiscordChatConfig
   | ResolvedMicrosoftTeamsChatConfig
-  | ResolvedTelegramChatConfig;
+  | ResolvedTelegramChatConfig
+  | ResolvedMattermostChatConfig;
 
 export type ChatSdkMessageTrigger =
   "direct_message" | "mention" | "subscribed_message" | "unaddressed_message";
@@ -263,6 +282,10 @@ type ChatSdkAttachmentLocator =
       fileId: string;
       fileUniqueId?: string;
       kind: "telegram_file_id";
+    }
+  | {
+      fileId: string;
+      kind: "mattermost_file_id";
     };
 
 /**
@@ -468,6 +491,12 @@ export interface DiscordGatewayCallbackEvent extends ChatSdkCallbackEvent<Discor
  * normalization. Raw provider payloads remain available only through the
  * Chat SDK event escape hatches; callers must never publish them directly.
  */
+export interface MattermostReceiverCallbackEvent {
+  endpointId: string;
+  event: MattermostReceiverEvent;
+  provider: "mattermost";
+}
+
 export interface ChatSdkRuntimeCallbacks {
   onPhotonEvent?(event: PhotonEvent): Promise<void>;
   onPhotonAssertOwned?(activeThreadId?: string): Promise<void>;
@@ -482,6 +511,9 @@ export interface ChatSdkRuntimeCallbacks {
   ): Promise<boolean> | boolean;
   onDiscordGatewayEvent?(
     event: DiscordGatewayCallbackEvent,
+  ): Promise<void> | void;
+  onMattermostReceiverEvent?(
+    event: MattermostReceiverCallbackEvent,
   ): Promise<void> | void;
   onAction?(event: ChatSdkCallbackEvent<ActionEvent>): Promise<void> | void;
   /** Optional personal-chat file lane; "recorded" is not file delivery. */
@@ -1490,6 +1522,21 @@ function createProviderAdapter(
         typeof callbacks.onTeamsFileConsent === "function",
       );
     }
+    case "mattermost": {
+      return createMattermostAdapter({
+        ...config.credentials,
+        logger: resolvedLogger,
+        maxDownloadBytes: config.maxDownloadBytes,
+        userName: config.userName,
+        onReceiverEvent: async (event) => {
+          await callbacks.onMattermostReceiverEvent?.({
+            endpointId,
+            event,
+            provider: "mattermost",
+          });
+        },
+      });
+    }
     case "telegram": {
       const adapterConfig: TelegramAdapterConfig = {
         ...config.credentials,
@@ -1657,6 +1704,17 @@ function createAttachmentRecoveryDescriptor(
     };
   }
 
+  if (provider === "mattermost") {
+    const fileId = fetchMetadata.fileId;
+    if (typeof fileId !== "string" || !/^[a-z0-9]{26}$/.test(fileId)) return null;
+    return {
+      version: 1,
+      provider,
+      attachment: metadata,
+      locator: { kind: "mattermost_file_id", fileId },
+    };
+  }
+
   if (provider === "telegram") {
     const fileId = boundedAttachmentText(fetchMetadata.fileId, 2048);
     if (!fileId) return null;
@@ -1732,6 +1790,12 @@ function validatedAttachmentRecoveryDescriptor(
     return createAttachmentRecoveryDescriptor(provider, {
       ...metadata,
       fetchMetadata: { url: value.locator.url as string },
+    });
+  }
+  if (provider === "mattermost" && kind === "mattermost_file_id") {
+    return createAttachmentRecoveryDescriptor(provider, {
+      ...metadata,
+      fetchMetadata: { fileId: value.locator.fileId as string },
     });
   }
   if (provider === "telegram" && kind === "telegram_file_id") {
@@ -2053,6 +2117,8 @@ export class ChatSdkEndpointRuntime {
   private discordGatewayAbort: AbortController | null = null;
   private discordGatewayTask: Promise<void> | null = null;
   private discordGatewayFatal = false;
+  private mattermostReceiverAbort: AbortController | null = null;
+  private mattermostReceiverTask: Promise<void> | null = null;
   private initialization: Promise<void> | null = null;
   private retired = false;
   private photonReceiver?: PhotonReceiver;
@@ -2310,6 +2376,23 @@ export class ChatSdkEndpointRuntime {
     if (this.provider === "discord" && this.discordGatewayEnabled) {
       this.startDiscordGateway();
     }
+    if (this.adapter instanceof MattermostAdapter && this.discordGatewayEnabled) {
+      this.startMattermostReceiver(this.adapter);
+    }
+  }
+
+  /** Owned by the endpoint's receiver lease, like Discord's Gateway. */
+  private startMattermostReceiver(adapter: MattermostAdapter): void {
+    this.assertNotRetired();
+    if (this.mattermostReceiverTask) return;
+    const abort = new AbortController();
+    this.mattermostReceiverAbort = abort;
+    this.mattermostReceiverTask = adapter
+      .runReceiver(abort.signal)
+      .catch(() => undefined)
+      .finally(() => {
+        this.mattermostReceiverTask = null;
+      });
   }
 
   private async initializeChat(): Promise<void> {
@@ -2723,6 +2806,17 @@ export class ChatSdkEndpointRuntime {
    * verified activity body therefore remains the authoritative tenant claim.
    */
   acceptsProviderScope(raw: unknown): boolean {
+    if (this.adapter instanceof MattermostAdapter) {
+      // The adapter drops other teams before dispatch; repeat the check on
+      // every SDK callback so a raw payload can never cross the team boundary.
+      if (!isRecord(raw)) return false;
+      const kind = raw.paperclip_channel_kind;
+      if (kind !== "c" && kind !== "d" && kind !== "g") return false;
+      return this.adapter.acceptsScope({
+        paperclip_channel_kind: kind,
+        paperclip_team_id: typeof raw.paperclip_team_id === "string" ? raw.paperclip_team_id : "",
+      });
+    }
     if (this.provider === "discord" && this.discordGuildId) {
       if (!isRecord(raw)) return false;
       const guildId = raw.guild_id;
@@ -3132,6 +3226,9 @@ export class ChatSdkEndpointRuntime {
             : {}),
         };
         break;
+      case "mattermost_file_id":
+        fetchMetadata = { fileId: validated.locator.fileId };
+        break;
     }
     return this.adapter.rehydrateAttachment({
       ...validated.attachment,
@@ -3146,12 +3243,15 @@ export class ChatSdkEndpointRuntime {
     if (this.shutdownCompleted) return;
     if (this.shutdownTask) return await this.shutdownTask;
     this.discordGatewayAbort?.abort();
+    this.mattermostReceiverAbort?.abort();
     const task = (async () => {
       // Even a rejected initialization may have connected state or partially
       // initialized an adapter. Join it before disconnecting that ownership.
       await this.initialization?.catch(() => undefined);
       await this.discordGatewayTask?.catch(() => undefined);
       this.discordGatewayAbort = null;
+      await this.mattermostReceiverTask?.catch(() => undefined);
+      this.mattermostReceiverAbort = null;
       await this.photonReceiver?.close();
       await this.chat.shutdown();
       this.shutdownCompleted = true;
