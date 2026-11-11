@@ -114,7 +114,7 @@ import { RUNNERD_CONTROL_PLANE_STATE_SCHEMAS, runnerdStateIsIncompleteBootstrap,
 import { createNativeDeliverableTextObservation } from "./native-deliverable-text.js";
 import { reconcileControllerJournalWithRunner, refreshRetiredWarmOwnerProjection } from "./warm-controller-journal.js";
 import { createNativeGitHubAccess, type NativeGitHubAccess } from "./native-github-access.js";
-import { resolveGitHubOperationCredentials } from "../github-operation-credentials.js";
+import { resolveForgeOperationCredentials } from "../gitea/operation-credentials.js";
 import { syncManagedAiCredentials, type ManagedAiCredentialWritebackBinding } from "../managed-ai-credential-writeback.js";
 import { createNativeCredentialStore } from "./native-credential-store.js";
 import { bindManagedNativeCredentialTurn, completeManagedNativeCredentialTurn } from "./managed-native-credentials.js";
@@ -12179,7 +12179,7 @@ async function executePaperclipNativeSessionAttempt(
           target: input.runnerExecutionTarget,
           cwd: input.execution.workspace.cwd!,
           env: resolveNativeProviderEnvironment(input.execution.provider, input.runnerEnvironment),
-          resolveCredentials: (binding) => resolveGitHubOperationCredentials(input.db, binding),
+          resolveCredentials: (binding) => resolveForgeOperationCredentials(input.db, binding),
           onLog: input.onLog,
         }));
         executionContext?.assertOpen();

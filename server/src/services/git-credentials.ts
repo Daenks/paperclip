@@ -14,6 +14,9 @@ import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { isGitHubDotCom } from "./github-fetch.js";
 import { secretService } from "./secrets.js";
 import { toolAccessService } from "./tool-access.js";
+import { resolveGiteaGitCredentials, type GiteaCredentialDeps } from "./gitea/credentials.js";
+import { buildGiteaGitAuth, giteaGitConfigArgs } from "./gitea/git-auth.js";
+import { matchGiteaHttpRemote } from "./gitea/hosts.js";
 
 /**
  * Server-side git credentials for managed project checkouts and execution-workspace base
@@ -111,6 +114,17 @@ export function scrubGitCredentialText(text: string): string {
   return text
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi, "$1***@")
     .replace(/([a-z][a-z0-9+.-]*:\/\/[^\s"'?]*)\?[^\s"']*/gi, "$1?***");
+}
+
+/** Credential-bearing invocation for Gitea remotes; see `./gitea/git-auth.ts`. */
+export function buildGiteaInvocation(credentials: Parameters<typeof buildGiteaGitAuth>[0]): GitAuthInvocation {
+  const auth = buildGiteaGitAuth(credentials);
+  return {
+    configArgs: ["-c", "credential.helper=", ...giteaGitConfigArgs(auth.entries)],
+    env: { ...auth.env, GIT_TERMINAL_PROMPT: "0" },
+    source: credentials[0]!.source,
+    secretName: credentials[0]!.secretName,
+  };
 }
 
 export function buildGitAuthInvocation(credential: GitCredential): GitAuthInvocation {
@@ -325,7 +339,36 @@ export function createGitRemoteAuthProvider(
     return null;
   };
 
+  let giteaPromise: Promise<GitAuthInvocation | null> | null = null;
+  const resolveGitea = async (remoteUrl: string): Promise<GitAuthInvocation | null | undefined> => {
+    if (isSupportedGitHubRemoteUrl(remoteUrl)) return undefined;
+    giteaPromise ??= resolveGiteaGitCredentials(db ?? null, companyId, {
+      agentId: context?.agentId, responsibleUserId: context?.responsibleUserId,
+      issueId: context?.issueId, heartbeatRunId: context?.heartbeatRunId,
+    }, { env, secrets: secrets as GiteaCredentialDeps["secrets"],
+      refreshOAuthGrant: db ? (input) => toolAccessService(db).refreshOAuthGrantCredentials({
+        ...input, actor: { actorType: "system", actorId: "workspace-git-credential" },
+      }) : undefined,
+    }).then((resolution) => {
+      giteaResolution = resolution;
+      if (resolution.credentials.length === 0) return null;
+      return buildGiteaInvocation(resolution.credentials);
+    });
+    const invocation = await giteaPromise;
+    const host = matchGiteaHttpRemote(remoteUrl, [
+      ...(giteaResolution?.credentials.map((credential) => credential.host) ?? []),
+      ...(giteaResolution?.errors.map((failure) => failure.host) ?? []),
+    ]);
+    if (!host) return undefined;
+    const failure = giteaResolution?.errors.find((candidate) => candidate.host.origin === host.origin);
+    if (failure) throw new Error(failure.error);
+    return invocation;
+  };
+  let giteaResolution: Awaited<ReturnType<typeof resolveGiteaGitCredentials>> | null = null;
+
   return async (remoteUrl: string) => {
+    const gitea = await resolveGitea(remoteUrl);
+    if (gitea !== undefined) return gitea;
     if (!isSupportedGitHubRemoteUrl(remoteUrl)) return null;
     if (db && context?.heartbeatRunId && context.agentId) {
       const [run] = await db.select({ contextId: heartbeatRuns.activeIdentityContextId }).from(heartbeatRuns).where(and(
