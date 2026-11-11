@@ -185,6 +185,9 @@ not own durable tokens.
 - [First-30 matrix](./FIRST-30-MATRIX.md) harvests the keeper from
   [PAP-2432](/PAP/issues/PAP-2432) and is the source matrix for connector
   playbook work.
+- [Gitea](./GITEA.md) covers Gitea as a source forge: the instance switch,
+  connection methods, agent Git, project repositories, the review bot and skill
+  sources.
 - [Connecting any remote MCP server](./GENERIC-REMOTE-MCP.md) is the baseline:
   how an operator connects a standards-compliant remote MCP endpoint with no
   Paperclip code change, and how sign-in resolves a client.

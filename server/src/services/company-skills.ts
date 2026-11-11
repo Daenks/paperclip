@@ -126,7 +126,8 @@ import {
 } from "@paperclipai/shared";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
-import { ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
+import { ghFetch, gitHubApiBase, gitHubCommitApiPath, giteaHostFor, resolveRawGitHubUrl } from "./github-fetch.js";
+import { resolveCompanyGiteaHosts } from "./gitea/credentials.js";
 import { agentService } from "./agents.js";
 import { issueDocumentSelect, mapIssueDocumentRow } from "./documents.js";
 import { toIssueWorkProduct } from "./work-products.js";
@@ -814,9 +815,9 @@ async function resolveGitHubDefaultBranch(owner: string, repo: string, apiBase: 
   return asString(response.default_branch) ?? "main";
 }
 
-async function resolveGitHubCommitSha(owner: string, repo: string, ref: string, apiBase: string) {
+async function resolveGitHubCommitSha(owner: string, repo: string, ref: string, apiBase: string, hostname = "github.com") {
   const response = await fetchJson<{ sha?: string }>(
-    `${apiBase}/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}`,
+    `${apiBase}${gitHubCommitApiPath(hostname, owner, repo, ref)}`,
   );
   const sha = asString(response.sha);
   if (!sha) {
@@ -843,7 +844,16 @@ function parseGitHubSourceUrl(rawUrl: string) {
   let basePath = "";
   let filePath: string | null = null;
   let explicitRef = false;
-  if (parts[2] === "tree") {
+  if (parts[2] === "src" && ["branch", "commit", "tag"].includes(parts[3] ?? "") && giteaHostFor(url.hostname)) {
+    // Gitea: /owner/repo/src/{branch|commit|tag}/<ref>/<path>; a path ending in .md is a file.
+    ref = parts[4] ?? "main";
+    const rest = parts.slice(5).join("/");
+    if (/\.md$/i.test(rest)) {
+      filePath = rest;
+      basePath = path.posix.dirname(rest) === "." ? "" : path.posix.dirname(rest);
+    } else basePath = rest;
+    explicitRef = true;
+  } else if (parts[2] === "tree") {
     ref = parts[3] ?? "main";
     basePath = parts.slice(4).join("/");
     explicitRef = true;
@@ -894,7 +904,7 @@ async function resolveGitHubPinnedRef(parsed: ReturnType<typeof parseGitHubSourc
   const trackingRef = parsed.explicitRef
     ? parsed.ref
     : await resolveGitHubDefaultBranch(parsed.owner, parsed.repo, apiBase);
-  const pinnedRef = await resolveGitHubCommitSha(parsed.owner, parsed.repo, trackingRef, apiBase);
+  const pinnedRef = await resolveGitHubCommitSha(parsed.owner, parsed.repo, trackingRef, apiBase, parsed.hostname);
   return { pinnedRef, trackingRef };
 }
 
@@ -4449,8 +4459,9 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     }
 
     const hostname = asString(metadata.hostname) || "github.com";
+    if (hostname !== "github.com") await resolveCompanyGiteaHosts(db, companyId).catch(() => []);
     const apiBase = gitHubApiBase(hostname);
-    const latestRef = await resolveGitHubCommitSha(owner, repo, trackingRef, apiBase);
+    const latestRef = await resolveGitHubCommitSha(owner, repo, trackingRef, apiBase, hostname);
     return {
       supported: true,
       reason: null,
@@ -4521,6 +4532,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
         throw unprocessable("Skill source metadata is incomplete.");
       }
       const repoPath = normalizePortablePath(path.posix.join(repoSkillDir, normalizedPath));
+      if (hostname !== "github.com") await resolveCompanyGiteaHosts(db, skill.companyId).catch(() => []);
       try {
         content = await fetchText(resolveRawGitHubUrl(hostname, owner, repo, ref, repoPath));
       } catch (error) {
@@ -5026,6 +5038,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       throw unprocessable("Skill source locator is missing.");
     }
 
+    await resolveCompanyGiteaHosts(db, companyId).catch(() => []);
     const result = await readUrlSkillImports(companyId, skill.sourceLocator, skill.slug);
     const matching = result.skills.find((entry) => entry.key === skill.key) ?? result.skills[0] ?? null;
     if (!matching) {
@@ -6557,6 +6570,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     await ensureSkillInventoryCurrent(companyId);
     const parsed = parseSkillImportSourceInput(source);
     const local = !/^https?:\/\//i.test(parsed.resolvedSource);
+    if (!local) await resolveCompanyGiteaHosts(db, companyId).catch(() => []);
     if (local) {
       await assertLocalImportSourceAllowed(companyId, parsed.resolvedSource);
     }

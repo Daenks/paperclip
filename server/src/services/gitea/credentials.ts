@@ -62,6 +62,13 @@ export async function resolveCompanyGiteaHosts(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<GiteaHost[]> {
   if (db && !(await isGiteaEnabled(db))) return [];
+  const hosts = await listCompanyGiteaHosts(db, companyId, env);
+  const { registerGiteaHosts } = await import("../github-fetch.js");
+  registerGiteaHosts(hosts);
+  return hosts;
+}
+
+async function listCompanyGiteaHosts(db: Db | null, companyId: string, env: NodeJS.ProcessEnv): Promise<GiteaHost[]> {
   const connectionHosts = db
     ? (await listGiteaConnections(db, companyId))
       .filter((connection) => connection.enabled && connection.status === "active")
