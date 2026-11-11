@@ -20,7 +20,7 @@ gitea-mcp v1.13.0. Forgejo is not claimed.
 | Method | When | Notes |
 |---|---|---|
 | Use an access token (`mcp-access-token`) | You run `gitea-mcp -t http` | Paperclip calls `https://<mcpHost>:<mcpPort>/mcp` with `Authorization: Bearer <token>`. |
-| Use your own Gitea OAuth2 app (`mcp-own-oauth`) | You run `gitea-mcp -t http -oauth -oauth-public-url …` | Register an OAuth2 app in Gitea (Settings → Applications) with Paperclip's callback URL, then enter the client ID and secret. A person signs in once; Paperclip refreshes the token. Not run end to end yet (needs a browser sign-in). |
+| Use your own Gitea OAuth2 app (`mcp-own-oauth`) | You run `gitea-mcp -t http -oauth -oauth-public-url …` | Register an OAuth2 app in Gitea (Settings → Applications) with Paperclip's callback URL, then enter the client ID and secret. A person signs in once; Paperclip refreshes the token. Paperclip discovers Gitea as the authorization server from gitea-mcp and uses PKCE. Editing the Gitea OAuth2 app (for example its redirect URIs) regenerates its client secret; reconnect with the new secret. |
 | Run gitea-mcp on the Paperclip server (`local-stdio`) | `gitea-mcp` is on the server's PATH | Approved template `paperclip.gitea-mcp`: `gitea-mcp -t stdio` with `GITEA_HOST` from the connection and `GITEA_ACCESS_TOKEN` from its credential. |
 
 The token (or OAuth token) is the identity for repository tools **and** for Git over HTTPS on
@@ -97,5 +97,4 @@ fetches.
 
 - Link previews and external objects for Gitea URLs.
 - Gitea in company export/import (portability) beyond what the GitHub helpers already handle.
-- OAuth2 method end to end with a real browser sign-in.
 - SSH transport for agent Git (deferred by decision).

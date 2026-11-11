@@ -3012,8 +3012,8 @@
       "policy": "provider-default",
       "requestedScopes": [],
       "supportedActions": "Same gitea-mcp tools as the access-token method, as the signed-in Gitea user.",
-      "liveProof": "Not run end to end; needs a browser sign-in.",
-      "evidenceLimit": "OAuth discovery depends on gitea-mcp -oauth publishing protected-resource metadata.",
+      "liveProof": "Local fork only, 2026-11-11: Gitea 1.25.1 with gitea-mcp -oauth behind TLS. Paperclip discovered Gitea from the protected-resource metadata, completed PKCE sign-in with a customer OAuth2 app, discovered 48 actions and ran get_me. Gitea accepted the OAuth token for git over HTTPS.",
+      "evidenceLimit": "Token refresh and revocation were not observed.",
       "providerDefaultReason": "Gitea OAuth2 applications grant the signed-in user's account access; Gitea does not let gitea-mcp request narrower scopes, so the user's own Gitea permissions are the boundary."
     },
     {

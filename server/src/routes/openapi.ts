@@ -1421,6 +1421,7 @@ const PUBLIC_OPERATIONS = new Set([
   "POST /mcp/gateways/{gatewayPublicId}",
   "GET /api/tool-gateway/gateways/{gatewayId}/mcp",
   "POST /api/tool-gateway/gateways/{gatewayId}/mcp",
+  "POST /api/gitea/review-bots/{publicId}/webhook",
 ]);
 
 const BOARD_ONLY_PREFIXES = [
@@ -5629,6 +5630,60 @@ registry.registerPath({
   },
   responses: { 202: r.ok(), 400: r.badRequest, 401: r.unauthorized, 404: r.notFound,
     409: r.conflict, 415: { ...r.badRequest, description: "Unsupported media type" }, 422: r.unprocessable },
+});
+
+// ─── Gitea ───────────────────────────────────────────────────────────────────
+
+const giteaReviewBotSchema = z.object({
+  id: z.string(), companyId: z.string(), connectionId: z.string(), agentId: z.string(), routineId: z.string(),
+  triggerId: z.string(), hostOrigin: z.string(), botLogin: z.string(), statusContext: z.string(),
+  repositories: z.array(z.object({ fullName: z.string(), hookId: z.number().nullable(), error: z.string().nullable().optional() })),
+  createdByUserId: z.string().nullable(), createdAt: z.string(), updatedAt: z.string(),
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/companies/{companyId}/gitea/review-bots",
+  tags: ["gitea"],
+  summary: "List Gitea review bots",
+  request: { params: z.object({ companyId: z.string() }) },
+  responses: { 200: r.ok(z.array(giteaReviewBotSchema)), 401: r.unauthorized, 403: r.forbidden },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/companies/{companyId}/gitea/review-bots",
+  tags: ["gitea"],
+  summary: "Create a Gitea review bot",
+  description: "Creates the review routine and webhook trigger and registers Gitea webhooks with the bot identity. When registration is not possible, the response carries the webhook URL and secret once.",
+  request: {
+    params: z.object({ companyId: z.string() }),
+    body: jsonBody(z.object({
+      connectionId: z.string(), agentId: z.string(), repositories: z.array(z.string()).min(1).max(100),
+      statusContext: z.string().optional(),
+    })),
+  },
+  responses: { 201: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 422: r.unprocessable },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/companies/{companyId}/gitea/review-bots/{botId}",
+  tags: ["gitea"],
+  summary: "Remove a Gitea review bot",
+  request: { params: z.object({ companyId: z.string(), botId: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/gitea/review-bots/{publicId}/webhook",
+  tags: ["gitea"],
+  summary: "Receive a Gitea review bot webhook",
+  description: "Authenticated by the routine trigger's HMAC (X-Hub-Signature-256), not a session.",
+  request: { params: z.object({ publicId: z.string() }), body: jsonBody(z.record(z.string(), z.unknown())) },
+  responses: { 202: r.ok(), 400: r.badRequest, 401: r.unauthorized, 404: r.notFound,
+    415: { ...r.badRequest, description: "Unsupported media type" } },
 });
 
 // ─── Goals ───────────────────────────────────────────────────────────────────
