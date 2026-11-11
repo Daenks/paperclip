@@ -135,6 +135,7 @@ export function companyService(db: Db, _budgetHooks: BudgetServiceHooks = {}) {
     feedbackDataSharingConsentAt: companies.feedbackDataSharingConsentAt,
     feedbackDataSharingConsentByUserId: companies.feedbackDataSharingConsentByUserId,
     feedbackDataSharingTermsVersion: companies.feedbackDataSharingTermsVersion,
+    defaultForge: companies.defaultForge,
     logoAssetId: companyLogos.assetId,
     createdAt: companies.createdAt,
     updatedAt: companies.updatedAt,
@@ -145,6 +146,7 @@ export function companyService(db: Db, _budgetHooks: BudgetServiceHooks = {}) {
       ...company,
       status: company.status as Company["status"],
       pauseReason: company.pauseReason as Company["pauseReason"],
+      ...("defaultForge" in company ? { defaultForge: (company.defaultForge === "gitea" ? "gitea" : "github") as Company["defaultForge"] } : {}),
       logoUrl: company.logoAssetId ? `/api/assets/${company.logoAssetId}/content` : null,
     };
   }

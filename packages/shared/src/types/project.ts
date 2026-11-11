@@ -1,3 +1,4 @@
+import type { Forge } from "../forges.js";
 import type { BudgetWindowKind, PauseReason, ProjectStatus } from "../constants.js";
 import type {
   ProjectExecutionWorkspacePolicy,
@@ -155,6 +156,8 @@ export interface Project {
   color: string | null;
   icon: string | null;
   env: AgentEnvConfig | null;
+  /** Forge for the project's sources; null follows the company default. */
+  sourceForge?: Forge | null;
   pauseReason: PauseReason | null;
   pausedAt: Date | null;
   executionWorkspacePolicy: ProjectExecutionWorkspacePolicy | null;
@@ -186,6 +189,8 @@ export interface ProjectRepository {
   ownerType?: "personal" | "organization";
   url: string;
   private?: boolean;
+  /** Forge that serves the repository; absent means GitHub. */
+  provider?: "github" | "gitea";
   connections: string[];
   connectionIds?: string[];
 }

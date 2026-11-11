@@ -507,6 +507,18 @@ export function InstanceExperimentalSettings() {
         />
 
         <ExperimentalToggleCard
+          title="Gitea"
+          description="Use a self-hosted Gitea as a source forge: the Gitea connection, Gitea project repositories, agent Git access and the Gitea review bot."
+          footnote="Each company then chooses GitHub or Gitea as its default forge in Company settings. GitHub keeps working either way."
+          checked={experimentalQuery.data?.enableGitea === true}
+          onCheckedChange={(checked) => toggleMutation.mutate({ enableGitea: checked })}
+          disabled={toggleMutation.isPending}
+          settingKey="enableGitea"
+          managed={managedKeys.enableGitea}
+          ariaLabel="Toggle Gitea experimental setting"
+        />
+
+        <ExperimentalToggleCard
           title="Google Workspace connector (Paperclip)"
           description="Show the built-in Google Workspace connector for Gmail, Drive, and Calendar while Google verification is pending."
           footnote="Off by default. While off, Google apps are offered through Composio and Arcade instead, and the built-in connector cannot be set up or run."

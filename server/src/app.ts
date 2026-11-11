@@ -134,6 +134,7 @@ import { createRemoteWorkspaceFiles } from "./services/remote-workspace-files.js
 import { createSavedWorkspaceLoader } from "./services/remote-workspaces.js";
 import { createSavedWorkspaceArchiveOpener } from "./services/saved-workspace-archive.js";
 import { routineRoutes } from "./routes/routines.js";
+import { giteaRoutes } from "./routes/gitea.js";
 import { environmentRoutes } from "./routes/environments.js";
 import { executionWorkspaceRoutes } from "./routes/execution-workspaces.js";
 import { goalRoutes } from "./routes/goals.js";
@@ -824,6 +825,7 @@ export async function createApp(
     openSavedWorkspaceArchive: createSavedWorkspaceArchiveOpener(db, opts.storageService),
   }) }));
   api.use(routineRoutes(db, { pluginWorkerManager: workerManager }));
+  api.use(giteaRoutes(db));
   api.use(
     environmentRoutes(db, {
       pluginWorkerManager: workerManager,

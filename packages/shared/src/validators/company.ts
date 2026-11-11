@@ -1,3 +1,4 @@
+import { FORGES } from "../forges.js";
 import { z } from "zod";
 import {
   COMPANY_STATUSES,
@@ -49,6 +50,7 @@ export const updateCompanySchema = objectWithoutDefaults(
       feedbackDataSharingConsentByUserId: z.string().min(1).nullable().optional(),
       feedbackDataSharingTermsVersion: feedbackDataSharingTermsVersionSchema,
       logoAssetId: logoAssetIdSchema,
+      defaultForge: z.enum(FORGES).optional(),
     }),
 );
 

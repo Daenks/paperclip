@@ -75,6 +75,7 @@ export interface InstanceExperimentalSettings {
   enableChatConnectors: boolean;
   /** Show GitHub review bot setup and management independently of chat connectors. */
   enableGitHubReviewBots: boolean;
+  enableGitea: boolean;
   /** Allow person-authorized assistant tools and task event delivery. */
   enablePublicMcp: boolean;
   /** Enable the standalone Dot choice and dedicated agent MCP connection independently of the general Runner rollout. */

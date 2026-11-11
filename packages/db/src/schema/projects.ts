@@ -31,6 +31,8 @@ export const projects = pgTable(
     env: jsonb("env").$type<AgentEnvConfig>(),
     gitAuthorizationGrantId: uuid("git_authorization_grant_id").references(() => connectionGrants.id, { onDelete: "set null" }),
     gitAuthorizedByUserId: text("git_authorized_by_user_id"),
+    /** Forge for this project's sources; null follows the company default. */
+    sourceForge: text("source_forge"),
     pauseReason: text("pause_reason"),
     pausedAt: timestamp("paused_at", { withTimezone: true }),
     executionWorkspacePolicy: jsonb("execution_workspace_policy").$type<Record<string, unknown>>(),

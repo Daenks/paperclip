@@ -20,7 +20,7 @@ import { authorizationService, issueReadSqlCondition, type AuthorizationActor } 
 import { taskWorkspaceSelectableCondition } from "./task-workspace-selection.js";
 import { captureRunIdentity } from "./run-identity.js";
 import { toolAccessService } from "./tool-access.js";
-import { normalizeProjectRepositoryUrl } from "./project-repositories.js";
+import { giteaHostsForRepositories, normalizeProjectRepositoryUrl } from "./project-repositories.js";
 import { buildGitAuthInvocation, createGitRemoteAuthProvider } from "./git-credentials.js";
 import { materializeManagedProjectWorkspace, ensureManagedRepositoriesIgnored, RepositoryRefNotFoundError } from "./managed-repository-checkout.js";
 import { requiresAnonymousRepositoryAcquisition, taskRepositoryRunColumns } from "./task-repository-acquisition.js";
@@ -97,8 +97,9 @@ function assertAcquisitionReceipt(row: Pick<RepositoryRow, "catalogRepositoryId"
 export function resolveTaskRepository(request: PrepareWorkspaceRepository["repository"], available: ProjectRepository[]) {
   const selected = request.kind === "catalog" ? available.find(repo => repo.id === request.id) : null;
   if (request.kind === "catalog" && !selected) throw forbidden("Repository access is no longer available; refresh the repository catalog");
-  const source = normalizeProjectRepositoryUrl(selected?.url ?? (request.kind === "url" ? request.url : ""));
-  const match = selected ?? available.find(repo => normalizeProjectRepositoryUrl(repo.url).url.toLowerCase() === source.url.toLowerCase());
+  const giteaHosts = giteaHostsForRepositories(available);
+  const source = normalizeProjectRepositoryUrl(selected?.url ?? (request.kind === "url" ? request.url : ""), giteaHosts);
+  const match = selected ?? available.find(repo => normalizeProjectRepositoryUrl(repo.url, giteaHosts).url.toLowerCase() === source.url.toLowerCase());
   return { repoUrl: source.url, repositoryIdentity: source.url.toLowerCase(), catalogRepositoryId: match?.id ?? null };
 }
 
@@ -599,7 +600,8 @@ export function executionWorkspaceRepositoryService(db: Db) {
             if (result.warning) throw conflict(result.warning);
           }
           const git = async (...args: string[]) => (await execFile("git", ["-C", cwd, ...args], { timeout: 30_000, env: { ...process.env, GIT_NO_LAZY_FETCH: "1" } })).stdout.trim();
-          const origin = normalizeProjectRepositoryUrl(await measureRunPhase("workspace.repository.git_origin", () => git("remote", "get-url", "origin")));
+          const origin = normalizeProjectRepositoryUrl(await measureRunPhase("workspace.repository.git_origin", () => git("remote", "get-url", "origin")),
+            giteaHostsForRepositories([{ url: row.repositoryIdentity, provider: "gitea" }]));
           if (origin.url.toLowerCase() !== row.repositoryIdentity) throw conflict("Repository checkout belongs to a different origin");
           const ownership = await readOwnership();
           if (!authorizedPin && (ownership?.repositoryId !== row.id || !/^[a-f0-9]{40,64}$/.test(ownership.pinnedCommit))) throw conflict("Repository publication has no valid preparation receipt");

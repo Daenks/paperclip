@@ -346,6 +346,7 @@ export {
 export { APP_DEFINITIONS } from "./app-definitions.generated.js";
 export * from "./google-workspace-connectors.js";
 export * from "./github-connectors.js";
+export * from "./forges.js";
 export * from "./asana-connectors.js";
 export {
   BLOCKED_MCP_PROVIDERS,

@@ -1,3 +1,4 @@
+import { FORGES, PROJECT_REPOSITORY_ID_PATTERN } from "../forges.js";
 import { z } from "zod";
 import { PROJECT_STATUSES, PROJECT_ICON_NAMES } from "../constants.js";
 import { envConfigSchema } from "./secret.js";
@@ -121,6 +122,8 @@ const projectFields = {
   color: z.string().optional().nullable(),
   icon: z.enum(PROJECT_ICON_NAMES).optional().nullable(),
   env: envConfigSchema.optional().nullable(),
+  /** Forge for the project's sources; null follows the company default. */
+  sourceForge: z.enum(FORGES).optional().nullable(),
   executionWorkspacePolicy: projectExecutionWorkspacePolicySchema.optional().nullable(),
   archivedAt: z.string().datetime().optional().nullable(),
 };
@@ -131,7 +134,7 @@ export const createProjectSchema = z.object({
   environmentId: z.string().guid().optional(),
   expectedStorageProviderPluginId: z.string().guid().nullable().optional(),
   workspace: createProjectWorkspaceSchema.optional(),
-  repositoryIds: z.array(z.string().regex(/^\d+$/)).optional(),
+  repositoryIds: z.array(z.string().max(300).regex(PROJECT_REPOSITORY_ID_PATTERN)).optional(),
   repositoryUrls: z.array(z.string().url().max(2000)).max(100).optional(),
 });
 

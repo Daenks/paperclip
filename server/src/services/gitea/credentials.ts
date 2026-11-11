@@ -49,12 +49,19 @@ export async function listGiteaConnections(db: Db, companyId: string): Promise<C
   return rows.filter(isGiteaConnection);
 }
 
+/** The instance switch (`experimental.enableGitea`). Every Gitea path is off without it. */
+export async function isGiteaEnabled(db: Db): Promise<boolean> {
+  const { instanceSettingsService } = await import("../instance-settings.js");
+  return (await instanceSettingsService(db).getExperimentalReadOnly().catch(() => null))?.enableGitea === true;
+}
+
 /** Every Gitea host this company can reach: its active connections plus `PAPERCLIP_GITEA_HOSTS`. */
 export async function resolveCompanyGiteaHosts(
   db: Db | null,
   companyId: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<GiteaHost[]> {
+  if (db && !(await isGiteaEnabled(db))) return [];
   const connectionHosts = db
     ? (await listGiteaConnections(db, companyId))
       .filter((connection) => connection.enabled && connection.status === "active")
@@ -176,6 +183,7 @@ export async function resolveManagedGiteaCredential(
   context: GiteaCredentialContext,
   deps: GiteaCredentialDeps = {},
 ): Promise<{ configured: boolean; credential?: GiteaGitCredential; error?: string }> {
+  if (!(await isGiteaEnabled(db))) return { configured: false };
   const secrets = deps.secrets ?? secretService(db);
   const connections = (await listGiteaConnections(db, companyId)).filter((connection) =>
     connection.enabled && connection.status === "active"

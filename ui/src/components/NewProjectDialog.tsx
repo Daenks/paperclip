@@ -15,6 +15,8 @@ import { NativeSelect } from "./ui/select";
 import { Button } from "./ui/button";
 import { ProjectRepositoryInput, repositoryOptionsKey } from "./ProjectRepositoryInput";
 import { ConnectionSetupFlow } from "@/features/connections/ConnectionSetupFlow";
+import { useEffectiveForge } from "@/hooks/useForge";
+import type { Forge } from "@paperclipai/shared";
 
 export function NewProjectDialog() {
   const { newProjectOpen, closeNewProject } = useDialog();
@@ -29,6 +31,9 @@ export function NewProjectForm({ companyId, onClose }: { companyId: string; onCl
   const [color] = useState(() => PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)]!);
   const [repos, setRepos] = useState<ProjectRepository[]>([]);
   const [connecting, setConnecting] = useState(false);
+  const { companyDefault, giteaEnabled } = useEffectiveForge(null);
+  const [chosenForge, setChosenForge] = useState<Forge | null>(null);
+  const forge: Forge = chosenForge ?? companyDefault;
   const input = useRef<HTMLInputElement>(null);
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string | null>(null);
   const environments = useQuery({ queryKey: queryKeys.projects.environments(companyId), queryFn: () => projectsApi.environmentOptions(companyId), gcTime: 0 });
@@ -41,7 +46,8 @@ export function NewProjectForm({ companyId, onClose }: { companyId: string; onCl
   const environmentReady = Boolean(environmentView.kind !== "error" && options && (!options.error || selectedGroup) && (!options.groups.length || selectedGroup));
 
   const create = useMutation({
-    mutationFn: () => projectsApi.create(companyId, { name: name.trim(), color, status: "planned", repositoryIds: repos.map((repo) => repo.id), ...(selectedGroup ? { environmentId, expectedStorageProviderPluginId: selectedGroup.storageProviderPluginId } : {}) }),
+    mutationFn: () => projectsApi.create(companyId, { name: name.trim(), color, status: "planned", repositoryIds: repos.map((repo) => repo.id),
+      ...(chosenForge && chosenForge !== companyDefault ? { sourceForge: chosenForge } : {}), ...(selectedGroup ? { environmentId, expectedStorageProviderPluginId: selectedGroup.storageProviderPluginId } : {}) }),
     onSuccess: (project) => {
       trackRecentProject(project.id, companyId);
       void client.invalidateQueries({ queryKey: queryKeys.projects.all(companyId) });
@@ -53,8 +59,8 @@ export function NewProjectForm({ companyId, onClose }: { companyId: string; onCl
       className="flex max-h-(--sz-calc-18) flex-col gap-0 overflow-hidden p-0 shadow-sm sm:max-w-lg"
       onOpenAutoFocus={(event) => { event.preventDefault(); input.current?.focus(); }}>
       {connecting ? <div className="min-h-0 overflow-y-auto p-5">
-        <DialogTitle className="sr-only">Connect GitHub</DialogTitle>
-        <ConnectionSetupFlow host="dialog" serviceSlug="github" forceNewConnection onCancel={() => setConnecting(false)} onComplete={() => {
+        <DialogTitle className="sr-only">Connect {forge === "gitea" ? "Gitea" : "GitHub"}</DialogTitle>
+        <ConnectionSetupFlow host="dialog" serviceSlug={forge} forceNewConnection onCancel={() => setConnecting(false)} onComplete={() => {
           void client.invalidateQueries({ queryKey: repositoryOptionsKey(companyId) });
           setConnecting(false);
         }} />
@@ -86,7 +92,16 @@ export function NewProjectForm({ companyId, onClose }: { companyId: string; onCl
           {environmentView.kind === "error" && <QueryErrorState error={environmentView.error} size="inline" action="load project environments"
             className="mb-3" onRetry={environmentView.retry} retrying={environmentView.isFetching} />}
           {options?.error && !selectedGroup && <p role="alert" className="mb-3 text-sm text-destructive">{options.error}</p>}
-          <ProjectRepositoryInput companyId={companyId} selected={repos} onChange={setRepos} onConnect={() => setConnecting(true)} disabled={create.isPending} />
+          {giteaEnabled && <div className="mb-4 space-y-2">
+            <label htmlFor="project-source-forge" className="text-sm font-medium">Source forge</label>
+            <NativeSelect id="project-source-forge" value={forge} disabled={create.isPending || repos.length > 0}
+              onChange={event => setChosenForge(event.target.value as Forge)}>
+              <option value="github">GitHub</option>
+              <option value="gitea">Gitea</option>
+            </NativeSelect>
+            {repos.length > 0 && <p className="text-xs text-muted-foreground">Remove the selected repos to change the forge.</p>}
+          </div>}
+          <ProjectRepositoryInput companyId={companyId} selected={repos} onChange={setRepos} onConnect={() => setConnecting(true)} disabled={create.isPending} forge={forge} />
         </div>
         {create.status === "error" && <p role="alert" className="px-5 pt-3 text-sm text-destructive">{describeError(create.error).body}</p>}
         <div className="flex shrink-0 justify-between gap-2 px-5 py-5">

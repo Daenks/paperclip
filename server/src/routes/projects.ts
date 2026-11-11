@@ -11,6 +11,7 @@ import { parseNativeExecutionInput } from "../vendor/paperclip-runner/index.js";
 import { persistActivity, publishActivity } from "../services/activity-log.js";
 import { z } from "zod";
 import { normalizeProjectRepositoryUrl, resolveProjectRepositorySelection } from "../services/project-repositories.js";
+import { resolveCompanyGiteaHosts } from "../services/gitea/credentials.js";
 import { toolAccessService } from "../services/tool-access.js";
 import { Router, type Request, type Response } from "express";
 import type { Db } from "@paperclipai/db";
@@ -298,7 +299,10 @@ export function projectRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     const viewer = await repositoryViewer(req);
-    res.json(await toolAccessService(db).listProjectRepositories(companyId, viewer.userId, viewer.localTrusted));
+    const forge = req.query.forge === "gitea" || req.query.forge === "github" ? req.query.forge : undefined;
+    res.json(await toolAccessService(db).listProjectRepositories(companyId, viewer.userId, viewer.localTrusted, {
+      requiredRepositoryIds: [], ...(forge ? { forge } : {}),
+    }));
   });
 
   router.get("/projects/:id/git-authorization", async (req, res) => {
@@ -423,7 +427,8 @@ export function projectRoutes(db: Db) {
     const configurationWarnings = projectData.env !== undefined
       ? protectedEnvironmentKeyWarnings(await listProtectedEnvironmentKeyHolders(db), projectData.env, "env") : [];
     if (workspace && (repositoryIds || repositoryUrls)) throw unprocessable("Use either workspace or repositoryIds/repositoryUrls when creating a project");
-    const urlRepositories = (repositoryUrls ?? []).map(normalizeProjectRepositoryUrl);
+    const giteaHosts = repositoryUrls?.length ? await resolveCompanyGiteaHosts(db, companyId) : [];
+    const urlRepositories = (repositoryUrls ?? []).map((url) => normalizeProjectRepositoryUrl(url, giteaHosts));
     const repositories = repositoryIds ? await selectedRepositories(req, companyId, repositoryIds) : null;
     const actor = getActorInfo(req);
     const fingerprint = createHash("sha256").update(JSON.stringify({ projectData, workspace, repositoryIds, repositoryUrls, environmentId, expectedStorageProviderPluginId })).digest("hex");
@@ -484,7 +489,8 @@ export function projectRoutes(db: Db) {
       for (const repo of urlRepositories) {
         if (attachedUrls.has(repo.url.toLowerCase())) continue;
         attachedUrls.add(repo.url.toLowerCase());
-        await service.createWorkspace(project.id, { name: repo.fullName, repoUrl: repo.url });
+        await service.createWorkspace(project.id, { name: repo.fullName, repoUrl: repo.url,
+          ...(repo.provider === "gitea" ? { metadata: { repositoryProvider: "gitea" } } : {}) });
         registeredUrls.push(repo);
       }
       const createdWorkspace = workspace ? await service.createWorkspace(project.id, workspace) : null;

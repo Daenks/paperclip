@@ -112,6 +112,7 @@ export const companiesApi = {
         | "interactionResolverGovernance"
         | "feedbackDataSharingEnabled"
         | "logoAssetId"
+        | "defaultForge"
       >
     >,
   ) => api.patch<Company>(`/companies/${companyId}`, data),

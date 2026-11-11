@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { COMPANY_STATUSES, PAUSE_REASONS } from "./constants.js";
+import { FORGES } from "./forges.js";
 import { interactionResolverGovernanceSchema } from "./validators/company.js";
 import type { BoardBootstrap } from "./types/board-bootstrap.js";
 import type { Company } from "./types/company.js";
@@ -24,6 +25,7 @@ const companySnapshotSchema: z.ZodType<Company> = z.object({
   feedbackDataSharingConsentAt: z.coerce.date().nullable(),
   feedbackDataSharingConsentByUserId: z.string().nullable(),
   feedbackDataSharingTermsVersion: z.string().nullable(),
+  defaultForge: z.enum(FORGES).optional(),
   logoAssetId: z.string().nullable(),
   logoUrl: z.string().nullable(),
   createdAt: z.coerce.date(),

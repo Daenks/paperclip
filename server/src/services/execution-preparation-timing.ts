@@ -68,7 +68,7 @@ export type ExecutionPhase =
   | "workspace.repository.db.project" | "workspace.repository.db.run"
   | "connectors.github.catalog" | "connectors.github.connections" | "connectors.github.grants"
   | "connectors.github.grant_members" | "connectors.github.membership"
-  | "connectors.github.refresh" | "connectors.github.credentials" | "connectors.github.repositories"
+  | "connectors.github.refresh" | "connectors.github.credentials" | "connectors.github.repositories" | "connectors.gitea.repositories"
   | "connectors.github.grant_lock" | "connectors.github.grant_write" | "connectors.github.webhooks"
   | "connectors.github.refresh.transaction" | "connectors.github.refresh.transaction.entry"
   | "connectors.github.refresh.transaction.commit" | "connectors.github.refresh.transaction.rollback"

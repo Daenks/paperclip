@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { ghFetch } from "./github-fetch.js";
 import type { ProjectRepository, ProjectWorkspace } from "@paperclipai/shared";
 import { unprocessable } from "../errors.js";
+import { giteaHostsFromEnv, parseGiteaHost, parseGiteaRepositoryUrl, type GiteaHost } from "./gitea/hosts.js";
 import { isConnectionGrantAudienceAllowed } from "./tool-gateway.js";
 
 export function canBrowseProjectRepositoryGrant(input: {
@@ -19,13 +20,15 @@ export function canBrowseProjectRepositoryGrant(input: {
 
 export function mergeProjectRepository(
   repositories: Map<string, ProjectRepository>,
-  repo: { id: string; fullName: string; private?: boolean; ownerType?: ProjectRepository["ownerType"] },
+  repo: { id: string; fullName: string; private?: boolean; ownerType?: ProjectRepository["ownerType"];
+    /** Provider web URL; defaults to the github.com URL for GitHub catalog rows. */
+    url?: string; provider?: ProjectRepository["provider"] },
   connectionName: string,
   connectionId?: string,
 ) {
   const previous = repositories.get(repo.id);
   repositories.set(repo.id, {
-    ...repo, url: `https://github.com/${repo.fullName}`,
+    ...repo, url: repo.url ?? `https://github.com/${repo.fullName}`,
     connections: [...new Set([...(previous?.connections ?? []), connectionName])],
     ...(connectionId ? { connectionIds: [...new Set([...(previous?.connectionIds ?? []), connectionId])] } : {}),
   });
@@ -42,17 +45,25 @@ export function resolveProjectRepositorySelection(
     if (current) return current;
     const retained = existing.find((workspace) => workspace.metadata?.githubRepositoryId === id && workspace.repoUrl);
     if (retained) return { id, fullName: retained.name, url: retained.repoUrl!, connections: [],
+      ...(retained.metadata?.repositoryProvider === "gitea" ? { provider: "gitea" as const } : {}),
       ...(typeof retained.metadata?.githubRepositoryPrivate === "boolean" ? { private: retained.metadata.githubRepositoryPrivate } : {}) };
-    throw unprocessable("A selected GitHub repository is no longer available. Refresh repositories and try again.");
+    throw unprocessable("A selected repository is no longer available. Refresh repositories and try again.");
   });
 }
 
-/** Register an existing GitHub URL without assuming it is in the connection catalog.
+/** Register an existing GitHub (or configured Gitea) URL without assuming it is in the connection catalog.
  * No fetch or credential sharing: execution uses the normal repository access policy.
+ * Gitea URLs are accepted only on hosts from `PAPERCLIP_GITEA_HOSTS` or `giteaHosts`.
  */
-export function normalizeProjectRepositoryUrl(value: string): { fullName: string; url: string } {
+export function normalizeProjectRepositoryUrl(value: string, giteaHosts: GiteaHost[] = []): {
+  fullName: string; url: string; provider?: "gitea";
+} {
   let parsed: URL;
   try { parsed = new URL(value); } catch { throw unprocessable("Repository URL must be an HTTPS GitHub repository URL"); }
+  if (parsed.hostname !== "github.com") {
+    const gitea = parseGiteaRepositoryUrl(value, [...giteaHostsFromEnv(), ...giteaHosts]);
+    if (gitea) return { fullName: gitea.fullName, url: gitea.webUrl, provider: "gitea" };
+  }
   if (parsed.protocol !== "https:" || parsed.hostname !== "github.com" || parsed.port || parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw unprocessable("Repository URL must be an HTTPS GitHub repository URL without credentials, query, or fragment");
   }
@@ -63,6 +74,19 @@ export function normalizeProjectRepositoryUrl(value: string): { fullName: string
   return { fullName: path.slice(1), url: `https://github.com${path}` };
 }
 
+/** Gitea hosts implied by catalog rows (their URLs were built from a connection's host). */
+export function giteaHostsForRepositories(repositories: Pick<ProjectRepository, "url" | "provider">[]): GiteaHost[] {
+  return repositories.flatMap((repo) => {
+    if (repo.provider !== "gitea") return [];
+    try {
+      const host = parseGiteaHost(new URL(repo.url).origin);
+      return host ? [host] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
 /** Use the freshest active catalog visibility (the UI lock), then retained selections. Legacy URL-only
  * sources need anonymous discovery; unknown visibility must never start a private clone. */
 export async function projectRepositoryIsPrivate(
@@ -70,7 +94,12 @@ export async function projectRepositoryIsPrivate(
   companyId: string,
   workspace: Pick<ProjectWorkspace, "repoUrl" | "metadata">,
 ): Promise<boolean> {
-  const repo = normalizeProjectRepositoryUrl(workspace.repoUrl!);
+  const repo = normalizeProjectRepositoryUrl(workspace.repoUrl!, giteaHostsForRepositories([
+    { url: workspace.repoUrl!, provider: workspace.metadata?.repositoryProvider === "gitea" ? "gitea" : undefined },
+  ]));
+  // Gitea visibility is not tracked on GitHub grants; treat it as private so a credential is used.
+  if (repo.provider === "gitea") return typeof workspace.metadata?.githubRepositoryPrivate === "boolean"
+    ? workspace.metadata.githubRepositoryPrivate : true;
   const visibility = await db.select({
     refreshedAt: sql<string | null>`${connectionGrants.providerTenant}->'github'->>'lastAccessRefreshAt'`,
     private: sql<boolean | null>`(

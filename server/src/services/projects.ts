@@ -663,6 +663,11 @@ async function ensureSinglePrimaryWorkspace(
     );
 }
 
+/** Catalog rows from a Gitea connection record their forge; GitHub rows keep the original shape. */
+function repositoryProviderMetadata(repo: Pick<import("@paperclipai/shared").ProjectRepository, "provider">) {
+  return repo.provider === "gitea" ? { repositoryProvider: "gitea" as const } : {};
+}
+
 export function projectService(db: Db, options: { captureWorkspaceUpdates?: boolean } = {}) {
   const createProject = async (
     companyId: string,
@@ -939,7 +944,7 @@ export function projectService(db: Db, options: { captureWorkspaceUpdates?: bool
         const service = projectService(tx as unknown as Db, { captureWorkspaceUpdates: false });
         const project = await service.create(companyId, data, environment);
         for (const repo of repositories) {
-          await service.createWorkspace(project.id, { name: repo.fullName, repoUrl: repo.url, metadata: { githubRepositoryId: repo.id, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private } });
+          await service.createWorkspace(project.id, { name: repo.fullName, repoUrl: repo.url, metadata: { githubRepositoryId: repo.id, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private, ...repositoryProviderMetadata(repo) } });
         }
         return (await service.getById(project.id))!;
       });
@@ -966,14 +971,14 @@ export function projectService(db: Db, options: { captureWorkspaceUpdates?: bool
           const retained = existing.find((workspace) => workspace.metadata?.githubRepositoryId === repo.id);
           if (retained) {
             if (retained.repoUrl !== repo.url || retained.name !== repo.fullName || retained.metadata?.githubRepositoryPrivate !== repo.private || retained.metadata?.githubRepositoryUrl !== repo.url) {
-              await service.updateWorkspace(projectId, retained.id, { name: repo.fullName, repoUrl: repo.url, metadata: { ...retained.metadata, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private } });
+              await service.updateWorkspace(projectId, retained.id, { name: repo.fullName, repoUrl: repo.url, metadata: { ...retained.metadata, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private, ...repositoryProviderMetadata(repo) } });
             }
             continue;
           }
           const legacy = existing.find((workspace) => !workspace.metadata?.githubRepositoryId && workspace.repoUrl?.replace(/\.git$/, "").replace(/\/$/, "").toLowerCase() === repo.url.toLowerCase());
           if (legacy) {
-            await service.updateWorkspace(projectId, legacy.id, { metadata: { ...legacy.metadata, githubRepositoryId: repo.id, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private } });
-          } else await service.createWorkspace(projectId, { name: repo.fullName, repoUrl: repo.url, metadata: { githubRepositoryId: repo.id, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private } });
+            await service.updateWorkspace(projectId, legacy.id, { metadata: { ...legacy.metadata, githubRepositoryId: repo.id, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private, ...repositoryProviderMetadata(repo) } });
+          } else await service.createWorkspace(projectId, { name: repo.fullName, repoUrl: repo.url, metadata: { githubRepositoryId: repo.id, githubRepositoryUrl: repo.url, githubRepositoryPrivate: repo.private, ...repositoryProviderMetadata(repo) } });
         }
         await tx.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId));
         await recordProjectLifecycleEvent(tx as unknown as Db, project.companyId, projectId);

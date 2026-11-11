@@ -4,9 +4,13 @@ import { AgentObservabilitySettingsSection } from "../components/observability/A
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  type Forge,
   type InteractionResolverGovernance,
   type IssueThreadInteractionKind,
 } from "@paperclipai/shared";
+import { NativeSelect } from "@/components/ui/select";
+import { useGiteaEnabled } from "@/hooks/useForge";
+import { GiteaReviewBotsSection } from "@/components/GiteaReviewBotsSection";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useOptionalToastActions } from "../context/ToastContext";
@@ -20,7 +24,6 @@ import { assetsApi } from "../api/assets";
 import { describeError } from "@/api/errors";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/select";
 import { SlidersHorizontal } from "lucide-react";
 import {
   InteractionGovernancePanel,
@@ -400,6 +403,10 @@ export function CompanySettings() {
         </div>
       </div>
 
+      <DefaultForgeSection />
+
+      <GiteaReviewBotsSection companyId={selectedCompanyId!} />
+
       {/* Decisions */}
       <div className="max-w-2xl space-y-4" data-testid="company-settings-decisions-section">
         <div className="space-y-1">
@@ -499,6 +506,36 @@ export function CompanySettings() {
     </div>
   );
 }
+
+/** Company default forge for new project sources; shown only when the instance enables Gitea. */
+function DefaultForgeSection() {
+  const { selectedCompany, selectedCompanyId } = useCompany();
+  const queryClient = useQueryClient();
+  const giteaEnabled = useGiteaEnabled();
+  const mutation = useMutation({
+    mutationFn: (defaultForge: Forge) => companiesApi.update(selectedCompanyId!, { defaultForge }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+    },
+  });
+  if (!giteaEnabled || !selectedCompany) return null;
+  return (
+    <div className="max-w-2xl space-y-4" data-testid="company-settings-forge-section">
+      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Source forge</div>
+      <div className="space-y-2">
+        <label htmlFor="company-default-forge" className="text-sm font-medium">Default forge for project repositories</label>
+        <NativeSelect id="company-default-forge" value={selectedCompany.defaultForge ?? "github"} disabled={mutation.isPending}
+          onChange={(event) => mutation.mutate(event.target.value as Forge)}>
+          <option value="github">GitHub</option>
+          <option value="gitea">Gitea</option>
+        </NativeSelect>
+        <p className="text-xs text-muted-foreground">New projects pick repositories from this forge. A project can choose the other one in its settings. GitHub connections keep working either way.</p>
+        {mutation.error && <p role="alert" className="text-xs text-destructive">{describeError(mutation.error).body}</p>}
+      </div>
+    </div>
+  );
+}
+
 
 /**
  * One Decisions owner picker. It saves on change, on its own, so the page's

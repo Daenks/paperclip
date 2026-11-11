@@ -12,6 +12,10 @@ import { createConnectionInstalls } from "./tool-access/connections/installs.js"
 import { createConnectionRemoval } from "./tool-access/connections/removal.js";
 import { createToolRemoteHttp } from "./tool-access/remote-http.js";
 import { classifyRisk, normalizeToolDescriptor, type McpToolDescriptor } from "./tool-access/catalog/descriptors.js";
+import { GITEA_MCP_TOOLS } from "./gitea/mcp-tools.js";
+import { GITEA_APP_SLUG, giteaConnectionHost, isGiteaEnabled } from "./gitea/credentials.js";
+import { giteaClient, giteaOwnerType, listGiteaUserRepositories } from "./gitea/api.js";
+import { giteaCatalogRepositoryId, giteaRepositoryRef } from "./gitea/hosts.js";
 export { classifyRisk, isGmailToolPermanentlyBlocked, isGoogleWorkspaceToolAllowed, type McpToolDescriptor } from "./tool-access/catalog/descriptors.js";
 import { toCatalogEntry } from "./tool-access/catalog/projection.js";
 import { toConnection, toConnectionInstall } from "./tool-access/connections/projection.js";
@@ -320,6 +324,13 @@ const APPROVED_STDIO_TEMPLATES: Record<
     ],
   },
   "paperclip.cognee-cloud": COGNEE_STDIO_TEMPLATE,
+  "paperclip.gitea-mcp": {
+    name: "Gitea (gitea-mcp)",
+    command: "gitea-mcp",
+    args: ["-t", "stdio"],
+    envKeys: ["GITEA_ACCESS_TOKEN"],
+    tools: GITEA_MCP_TOOLS,
+  },
   "paperclip.google-sheets": {
     name: "Google Sheets",
     command: "paperclip-google-sheets-mcp-server",
@@ -4278,8 +4289,14 @@ export function toolAccessService(
     // Repository discovery uses credential audiences, not connection-management
     // visibility. An administrator cannot browse another user's private repos.
     listProjectRepositories: async (companyId: string, userId: string | null, localTrusted = false,
-      options?: { requiredRepositoryIds: readonly string[] }) =>
-      toolAccessService(db).listGitHubRepositories(companyId, userId, localTrusted, options),
+      options?: { requiredRepositoryIds: readonly string[]; forge?: "github" | "gitea" }) => {
+      const result = await toolAccessService(db).listGitHubRepositories(companyId, userId, localTrusted, {
+        requiredRepositoryIds: options?.requiredRepositoryIds ?? [], includeGitea: await isGiteaEnabled(db),
+      });
+      if (!options?.forge) return result;
+      // A forge filter narrows what a picker shows; selected ids are still resolved against the full list.
+      return { ...result, repositories: result.repositories.filter((repo) => (repo.provider ?? "github") === options.forge) };
+    },
 
     // Return identifiers, never credentials, so each attempted read can recheck its grant.
     githubReadConnectionIds: async (companyId: string, userId: string | null, localTrusted = false): Promise<string[]> => {
@@ -4323,7 +4340,7 @@ export function toolAccessService(
       companyId: string,
       userId: string | null,
       localTrusted = false,
-      options?: { requiredRepositoryIds: readonly string[] },
+      options?: { requiredRepositoryIds: readonly string[]; includeGitea?: boolean },
     ) => measureRunPhase("connectors.github.catalog", async () => {
       const [connections, grants, members, memberships] = await Promise.all([
         measureRunPhase("connectors.github.connections", () => db
@@ -4366,6 +4383,44 @@ export function toolAccessService(
       let failedConnectionCount = 0;
       const unavailable: RepositoryCatalogUnavailableError[] = [];
       for (const connection of connections) {
+        if (asRecord(connection.config).sourceTemplateKey === GITEA_APP_SLUG) {
+          if (!options?.includeGitea || connection.status !== "active" || !connection.enabled) continue;
+          const host = giteaConnectionHost(connection);
+          const giteaGrants = grants.filter((grant) => grant.connectionId === connection.id
+            && !(grant.kind === "organization" && ["per_user", "per_agent"].includes(connection.credentialPolicy))
+            && canBrowseProjectRepositoryGrant({
+              grant, userId, activeMember: localTrusted || memberships.length > 0,
+              audience: members.filter((member) => member.grantId === grant.id).map((member) => member.subjectId),
+            }));
+          if (!host || giteaGrants.length === 0) continue;
+          connectionCount += 1;
+          usableConnections.push({ id: connection.id, name: connection.name });
+          let failed = false;
+          for (const grant of giteaGrants) {
+            try {
+              const ref = grant.credentialSecretRefs.find((candidate) =>
+                ["oauth.access_token", "credentials.authorization", "env.GITEA_ACCESS_TOKEN"].includes(candidate.configPath));
+              if (!ref) throw unprocessable("Reconnect Gitea to load repositories");
+              const secret = await resolveOAuthGrantSecret(connection, grant, ref,
+                { actorType: "user", actorId: userId ?? "board" }, undefined);
+              const token = secret.value.trim().replace(/^(?:bearer|token)\s+/i, "");
+              const rows = await measureRunPhase("connectors.gitea.repositories", () =>
+                listGiteaUserRepositories(giteaClient(host, token)));
+              for (const row of rows) {
+                const ref = giteaRepositoryRef(host, row.full_name.split("/")[0]!, row.full_name.split("/")[1]!);
+                mergeProjectRepository(repositories, {
+                  id: giteaCatalogRepositoryId(host, row.id), fullName: row.full_name, private: row.private,
+                  ...(giteaOwnerType(row) ? { ownerType: giteaOwnerType(row) } : {}),
+                  url: ref.webUrl, provider: "gitea",
+                }, connection.name, connection.id);
+              }
+            } catch {
+              failed = true;
+            }
+          }
+          if (failed) failedConnectionCount += 1;
+          continue;
+        }
         if (
           connection.status !== "active" ||
           asRecord(connection.config).sourceTemplateKey !== "github"

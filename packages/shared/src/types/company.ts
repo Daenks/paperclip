@@ -1,3 +1,4 @@
+import type { Forge } from "../forges.js";
 import type {
   CompanyStatus,
   IssueThreadInteractionKind,
@@ -48,6 +49,8 @@ export interface Company {
   feedbackDataSharingConsentAt: Date | null;
   feedbackDataSharingConsentByUserId: string | null;
   feedbackDataSharingTermsVersion: string | null;
+  /** Forge that new project sources default to. */
+  defaultForge?: Forge;
   logoAssetId: string | null;
   logoUrl: string | null;
   createdAt: Date;

@@ -15,6 +15,8 @@ import { forbidden, notFound } from "../errors.js";
 import { resolveManagedGitHubCredential } from "./git-credentials.js";
 import { resolveGitHubOperationCredentials } from "./github-operation-credentials.js";
 import { normalizeProjectRepositoryUrl, projectRepositoryIsPrivate } from "./project-repositories.js";
+import { resolveCompanyGiteaHosts, resolveManagedGiteaCredential } from "./gitea/credentials.js";
+import { matchGiteaHttpRemote, type GiteaHost } from "./gitea/hosts.js";
 import { recordProjectLifecycleEvent } from "./resource-lifecycle-events.js";
 import { persistActivity, publishActivity } from "./activity-log.js";
 import { secretService } from "./secrets.js";
@@ -165,7 +167,17 @@ export function projectGitAuthorizationService(db: Db) {
           ),
         );
       if (!workspace?.repoUrl) throw forbidden("Git credentials require a configured project repository");
-      const repo = normalizeProjectRepositoryUrl(workspace.repoUrl);
+      const giteaHosts = await resolveCompanyGiteaHosts(db, input.companyId);
+      const repo = normalizeProjectRepositoryUrl(workspace.repoUrl, giteaHosts);
+      if (repo.provider === "gitea") {
+        if (input.expectedRepository && repo.fullName.toLowerCase() !== input.expectedRepository.toLowerCase())
+          throw forbidden("Project repository changed before Gitea authorization");
+        return resolveGiteaProjectToken(db, input.companyId, repo.url, giteaHosts, {
+          agentId: scope.agentId ?? null,
+          runId: scope.runId ?? null,
+          responsibleUserId: row.gitAuthorizedByUserId ?? null,
+        });
+      }
       if (input.expectedRepository && repo.fullName.toLowerCase() !== input.expectedRepository.toLowerCase())
         throw forbidden("Project repository changed before GitHub authorization");
       const isPrivate = await projectRepositoryIsPrivate(db, input.companyId, workspace);
@@ -250,4 +262,33 @@ export function projectGitAuthorizationService(db: Db) {
       return transientGitToken(resolved.credential.token);
     },
   };
+}
+
+/**
+ * Gitea project sources use the Gitea identity of the run's agent (or the project's
+ * authorizing user outside a run). Gitea visibility is not tracked, so a missing identity
+ * falls back to anonymous access and the clone fails if the repository is private.
+ */
+async function resolveGiteaProjectToken(
+  db: Db,
+  companyId: string,
+  repoUrl: string,
+  hosts: GiteaHost[],
+  context: { agentId: string | null; runId: string | null; responsibleUserId: string | null },
+): Promise<string | null> {
+  const host = matchGiteaHttpRemote(repoUrl, hosts);
+  if (!host) throw forbidden("Gitea host is not configured for this company");
+  let responsibleUserId = context.responsibleUserId;
+  if (context.runId && context.agentId) {
+    const [run] = await db.select({ responsibleUserId: heartbeatRuns.responsibleUserId }).from(heartbeatRuns).where(and(
+      eq(heartbeatRuns.id, context.runId), eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.agentId, context.agentId),
+    ));
+    if (!run) throw forbidden("Active task run is unavailable");
+    responsibleUserId = run.responsibleUserId ?? null;
+  }
+  const managed = await resolveManagedGiteaCredential(db, companyId, host, {
+    agentId: context.agentId, responsibleUserId, heartbeatRunId: context.runId,
+  });
+  if (managed.configured && !managed.credential) throw forbidden(managed.error ?? "Gitea credential unavailable");
+  return managed.credential ? transientGitToken(managed.credential.token) : null;
 }

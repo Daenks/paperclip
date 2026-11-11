@@ -95,6 +95,7 @@ function defaultExperimentalSettings(): InstanceExperimentalSettingsPayload {
     enableMuse: false,
     enableChatConnectors: false,
     enableGitHubReviewBots: false,
+    enableGitea: false,
     enableMemoryConnectors: false,
     enableGoogleWorkspaceConnector: false,
     enablePaperclipNotebook: false,

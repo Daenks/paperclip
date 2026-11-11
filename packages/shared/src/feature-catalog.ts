@@ -134,6 +134,13 @@ export const INSTANCE_FEATURE_CATALOG: Record<InstanceFeatureKey, FeatureCatalog
     cloudDefault: false,
     selfHostedDefault: false,
   },
+  enableGitea: {
+    title: "Gitea",
+    description: "Offer Gitea as a source forge: the Gitea connection, Gitea project repositories, agent Git credentials for Gitea hosts and the Gitea review bot. Companies then choose GitHub or Gitea as their default forge.",
+    tier: "managed",
+    cloudDefault: false,
+    selfHostedDefault: false,
+  },
   enableOpenAiDot: {
     title: "OpenAI Dot",
     description: "Add OpenAI Dot as a standalone agent choice with its own experimental opt-in. Requires Assistant connections (MCP) and an authenticated instance with a public HTTPS URL.",
