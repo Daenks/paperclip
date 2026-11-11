@@ -4932,7 +4932,7 @@ html:has(.design-proposal-theme) .design-navigation-group-label {
   flex-wrap: wrap;
   gap: var(--collection-toolbar-gap);
 }
-[data-canonical-toolbar] :is(button:not([data-toolbar-clear], .canonical-tab), a[data-slot="button"], select, [data-toolbar-control]) {
+[data-canonical-toolbar] :is(button:not([data-toolbar-clear], .canonical-tab, [role="switch"]), a[data-slot="button"], select, [data-toolbar-control]) {
   height: var(--collection-toolbar-height);
   border: var(--task-row-rule-width) solid var(--collection-toolbar-border);
   border-radius: var(--collection-toolbar-radius);
@@ -4948,7 +4948,7 @@ html:has(.design-proposal-theme) .design-navigation-group-label {
   width: var(--collection-toolbar-height);
   padding-inline: 0;
 }
-[data-canonical-toolbar] :is(button:not([data-toolbar-clear], .canonical-tab), a[data-slot="button"], select, [data-toolbar-control]):is(:hover, [aria-pressed="true"], [aria-selected="true"], [data-active="true"], [data-state="open"]) {
+[data-canonical-toolbar] :is(button:not([data-toolbar-clear], .canonical-tab, [role="switch"]), a[data-slot="button"], select, [data-toolbar-control]):is(:hover, [aria-pressed="true"], [aria-selected="true"], [data-active="true"], [data-state="open"]) {
   color: var(--foreground);
   background: var(--muted-highlight);
 }

@@ -29,7 +29,7 @@ export function AgentsToolbar({ query, onQueryChange, view, onViewChange, hideVi
           <Button type="button" size="icon-sm" variant={view === "list" ? "secondary" : "ghost"} className="design-toolbar-icon" onClick={() => onViewChange("list")} title="List view" aria-label="List view" aria-pressed={view === "list"}><List aria-hidden /></Button>
           <Button type="button" size="icon-sm" variant={view === "org" ? "secondary" : "ghost"} className="design-toolbar-icon" onClick={() => onViewChange("org")} title="Org chart view" aria-label="Org chart view" aria-pressed={view === "org"}><Network aria-hidden /></Button>
       </div>}
-      {!hideViewToggle && onDefaultOrgViewChange && <label className="flex items-center gap-2 text-sm text-muted-foreground">
+      {!hideViewToggle && onDefaultOrgViewChange && <label className="flex cursor-pointer select-none items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
         <ToggleSwitch checked={defaultOrgView === true} onCheckedChange={onDefaultOrgViewChange} aria-label="Default to org chart" />
         Default to org chart
       </label>}
