@@ -11711,8 +11711,18 @@ export function issueService(db: Db) {
         issueData.assigneeAgentId !== existing.assigneeAgentId
       ) {
         const externalBinding = await dbOrTx
-          .select({ id: chatConversations.id })
+          .select({
+            id: chatConversations.id,
+            boundAgentId: chatEndpoints.assignedAgentId,
+          })
           .from(chatConversations)
+          .leftJoin(
+            chatEndpoints,
+            and(
+              eq(chatEndpoints.companyId, chatConversations.companyId),
+              eq(chatEndpoints.id, chatConversations.endpointId),
+            ),
+          )
           .where(
             and(
               eq(chatConversations.companyId, existing.companyId),
@@ -11720,8 +11730,15 @@ export function issueService(db: Db) {
             ),
           )
           .limit(1)
-          .then((rows: Array<{ id: string }>) => rows[0] ?? null);
-        if (externalBinding) {
+          .then((rows: Array<{ id: string; boundAgentId: string | null }>) => rows[0] ?? null);
+        // An unassigned bound task may only take back the endpoint's agent.
+        // This recovers tasks whose assignee was cleared (e.g. by release).
+        const restoresBoundAgent =
+          externalBinding !== null &&
+          existing.assigneeAgentId === null &&
+          externalBinding.boundAgentId !== null &&
+          issueData.assigneeAgentId === externalBinding.boundAgentId;
+        if (externalBinding && !restoresBoundAgent) {
           throw conflict(
             "Agent assignment cannot change while this task is bound to an external channel",
             {
@@ -13226,6 +13243,22 @@ export function issueService(db: Db) {
         // Terminal assignment records who owned the work, not a live execution
         // claim. Cleanup must preserve it; unfinished release still relinquishes it.
         const isTerminal = existing.status === "done" || existing.status === "cancelled";
+        // A task bound to an external chat conversation keeps its agent: the
+        // binding locks the assignee, so clearing it would leave the task
+        // unassigned with nothing to wake it and no way to reassign it.
+        const chatBound = !isTerminal && existing.assigneeAgentId
+          ? await tx
+            .select({ id: chatConversations.id })
+            .from(chatConversations)
+            .where(
+              and(
+                eq(chatConversations.companyId, existing.companyId),
+                eq(chatConversations.issueId, existing.id),
+              ),
+            )
+            .limit(1)
+            .then((rows) => rows.length > 0)
+          : false;
         const releaseStatus =
           existing.status === "in_progress" ? "todo" : existing.status;
         await notifyTerminalWorkspaceWork(tx, `issue:${id}`);
@@ -13240,7 +13273,7 @@ export function issueService(db: Db) {
           .update(issues)
           .set({
             status: releaseStatus,
-            assigneeAgentId: isTerminal ? existing.assigneeAgentId : null,
+            assigneeAgentId: isTerminal || chatBound ? existing.assigneeAgentId : null,
             checkoutRunId: null,
             executionRunId: null,
             executionAgentNameKey: null,
