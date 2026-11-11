@@ -29,6 +29,7 @@ import { OrgChart } from "./OrgChart";
 import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
 import type { OrgChartActions } from "../components/OrgChartControls";
 import { AgentsToolbar } from "../components/AgentsToolbar";
+import { readAgentsDefaultOrgView, writeAgentsDefaultOrgView } from "../lib/agents-default-view";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
@@ -212,13 +213,21 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } = 
   const pathSegment = location.pathname.split("/").pop() ?? "all";
   const requestedTab: FilterTab = isFilterTab(pathSegment) ? pathSegment : "all";
   const previewTasks = import.meta.env.DEV && new URLSearchParams(location.search).get("orgTasks") === "demo";
-  const [view, setView] = useState<AgentsView>(() => previewTasks ? "org" : streamlinedUiEnabled ? initialView : "org");
+  const [defaultOrgView, setDefaultOrgView] = useState(readAgentsDefaultOrgView);
+  const preferredView: AgentsView = defaultOrgView ? "org" : initialView;
+  const [view, setView] = useState<AgentsView>(() => previewTasks ? "org" : streamlinedUiEnabled ? preferredView : "org");
   const forceListView = !streamlinedUiEnabled && isMobile;
   const effectiveView: AgentsView = forceListView ? "list" : view;
 
   useEffect(() => {
-    setView(previewTasks ? "org" : streamlinedUiEnabled ? initialView : "org");
+    setView(previewTasks ? "org" : streamlinedUiEnabled ? (readAgentsDefaultOrgView() ? "org" : initialView) : "org");
   }, [initialView, streamlinedUiEnabled, previewTasks]);
+
+  const handleDefaultOrgViewChange = (enabled: boolean) => {
+    writeAgentsDefaultOrgView(enabled);
+    setDefaultOrgView(enabled);
+    if (enabled) setView("org");
+  };
 
   const { data: instanceSettings } = useQuery({
     queryKey: queryKeys.instance.settings,
@@ -452,6 +461,8 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } = 
       <div className={effectiveView === "org" ? "agents-org-toolbar" : undefined}>
         <AgentsToolbar orgActions={visibleOrg.length ? chartActions : undefined} orgControlsRef={setOrgControlsContainer} query={query} onQueryChange={setQuery} view={effectiveView} onViewChange={setView}
           hideViewToggle={forceListView} onNewAgent={openNewAgent}
+          defaultOrgView={defaultOrgView}
+          onDefaultOrgViewChange={streamlinedUiEnabled ? handleDefaultOrgViewChange : undefined}
           filters={<AgentRosterFilters {...rosterFilters} count={filtered.length} compact />} />
       </div>
 
