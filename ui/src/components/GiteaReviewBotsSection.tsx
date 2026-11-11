@@ -73,7 +73,19 @@ export function GiteaReviewBotsSection({ companyId }: { companyId: string }) {
         </div>
         <fieldset className="space-y-1">
           <legend className="text-sm font-medium">Repositories</legend>
-          {giteaRepos.length === 0 && <p className="text-xs text-muted-foreground">No Gitea repositories available yet. Connect Gitea in Apps first.</p>}
+          {repos.isLoading && <p className="text-xs text-muted-foreground">Loading Gitea repositories…</p>}
+          {repos.error && <p role="alert" className="text-xs text-destructive">Couldn’t load Gitea repositories: {describeError(repos.error).body}</p>}
+          {repos.data && repos.data.failedConnectionCount > 0 && (
+            <p role="alert" className="text-xs text-destructive">
+              {repos.data.failedConnectionCount === 1 ? "A Gitea connection" : `${repos.data.failedConnectionCount} Gitea connections`} couldn’t list repositories. Check the connection’s host and token scopes; the server log has the reason.
+            </p>
+          )}
+          {repos.data && repos.data.connectionCount === 0 && (
+            <p className="text-xs text-muted-foreground">No Gitea connection you can use lists repositories yet. Connect Gitea in Apps first.</p>
+          )}
+          {repos.data && repos.data.connectionCount > 0 && repos.data.failedConnectionCount === 0 && giteaRepos.length === 0 && (
+            <p className="text-xs text-muted-foreground">The Gitea connection returned no repositories its identity can access.</p>
+          )}
           {giteaRepos.map((repo) => (
             <label key={repo.id} className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={selected.includes(repo.fullName)}
@@ -83,6 +95,9 @@ export function GiteaReviewBotsSection({ companyId }: { companyId: string }) {
           ))}
         </fieldset>
         {create.error && <p role="alert" className="text-sm text-destructive">{describeError(create.error).body}</p>}
+        {selected.length === 0 && connectionId && agentId && giteaRepos.length > 0 && (
+          <p className="text-xs text-muted-foreground">Pick at least one repository.</p>
+        )}
         <Button type="submit" className="self-start" disabled={!connectionId || !agentId || selected.length === 0 || create.isPending}>
           {create.isPending ? "Creating…" : "Create review bot"}
         </Button>

@@ -14,7 +14,8 @@ import { createToolRemoteHttp } from "./tool-access/remote-http.js";
 import { classifyRisk, normalizeToolDescriptor, type McpToolDescriptor } from "./tool-access/catalog/descriptors.js";
 import { GITEA_MCP_TOOLS } from "./gitea/mcp-tools.js";
 import { GITEA_APP_SLUG, giteaConnectionHost, isGiteaEnabled } from "./gitea/credentials.js";
-import { giteaClient, giteaOwnerType, listGiteaUserRepositories } from "./gitea/api.js";
+import { GiteaApiError, giteaClient, giteaOwnerType, listGiteaUserRepositories } from "./gitea/api.js";
+import { logger } from "../middleware/logger.js";
 import { giteaCatalogRepositoryId, giteaRepositoryRef } from "./gitea/hosts.js";
 export { classifyRisk, isGmailToolPermanentlyBlocked, isGoogleWorkspaceToolAllowed, type McpToolDescriptor } from "./tool-access/catalog/descriptors.js";
 import { toCatalogEntry } from "./tool-access/catalog/projection.js";
@@ -4414,8 +4415,15 @@ export function toolAccessService(
                   url: ref.webUrl, provider: "gitea",
                 }, connection.name, connection.id);
               }
-            } catch {
+            } catch (error) {
               failed = true;
+              // Status and code only: the message never carries the token.
+              logger.warn({
+                connectionId: connection.id, grantId: grant.id, host: host.origin,
+                status: error instanceof GiteaApiError ? error.status : undefined,
+                code: error instanceof GiteaApiError ? error.code : (error as { code?: string })?.code,
+                reason: error instanceof Error ? error.message.slice(0, 200) : undefined,
+              }, "Gitea repository listing failed");
             }
           }
           if (failed) failedConnectionCount += 1;

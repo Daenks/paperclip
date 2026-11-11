@@ -3503,7 +3503,7 @@ function KeyStep({
   const optionalCustomerOAuthClient = !usingVercel
     && acceptsCustomerOAuthClient
     && !customerOAuthClientRequired;
-  const hasAlternateMethods = capabilityGroups.length > 1 || capabilityMethods.length > 1;
+  const hasAlternateCapabilities = capabilityGroups.length > 1;
   const capabilitySelection = capabilityGroups.length > 1 ? (
     <div>
       <label className="text-sm font-medium text-foreground">What should Paperclip be able to do?</label>
@@ -3547,10 +3547,14 @@ function KeyStep({
     >
       {usingCustomOAuth ? "Use Paperclip instead" : `Use your own ${isGoogleWorkspaceConnectorProfileId(managedOAuthMethod.connectorProfile ?? "") ? "Google" : entry.name} OAuth app`}
     </Button>
-  ) : capabilityMethods.length > 1 ? (
-    // PAP-659 C1: the ranked default is already selected. This stays as the
-    // way to pick something else, one disclosure away, rather than a question
-    // the screen opens with.
+  ) : null;
+  // When methods ask for different settings (Gitea: a gitea-mcp host for remote
+  // methods, none for the server-run one), the method decides what the form shows,
+  // so the choice is its own section above the form. Otherwise the ranked default
+  // stays preselected and the choice stays in the settings under the form (PAP-659 C1).
+  const methodsChangeSettings = new Set(capabilityMethods.map((candidate) =>
+    (candidate.tenantFields ?? []).map((field) => field.key).sort().join(","))).size > 1;
+  const methodChooser = !authenticationSelection && capabilityMethods.length > 1 ? (
     <div>
       <label className="text-sm font-medium text-foreground">How do you want to connect?</label>
       <RadioCardGroup
@@ -3569,9 +3573,12 @@ function KeyStep({
       {!method && <p className="mt-2 text-xs text-muted-foreground">Choose a connection method to continue.</p>}
     </div>
   ) : null;
+  const methodSelection = methodsChangeSettings ? methodChooser : null;
   const hasAdvancedSettings = advancedConfigFields.length > 0
     || optionalCustomerOAuthClient
-    || hasAlternateMethods;
+    || hasAlternateCapabilities
+    || Boolean(authenticationSelection)
+    || Boolean(methodChooser && !methodSelection);
   // Keep the disclosure open when what is inside it is load-bearing right now:
   // a non-default method in use, or a selection the connector still needs.
   const forceAdvancedOpen = usingCustomOAuth || !hasMethodSelection;
@@ -3579,6 +3586,7 @@ function KeyStep({
     <div className="space-y-6">
       {capabilitySelection}
       {authenticationSelection}
+      {methodSelection ? null : methodChooser}
       {advancedConfigFields.map((field) => (
         <MethodConfigField
           key={field.key}
@@ -3608,6 +3616,11 @@ function KeyStep({
     const canConnect = settingsValid && !unavailable && Boolean(robotEmail) && googleSheetsLinks.trim().length > 0;
     return (
       <div className="mx-auto max-w-xl">
+        {methodSelection ? (
+          <section aria-label="Connection method" className="mb-6 border-b border-border pb-6">
+            {methodSelection}
+          </section>
+        ) : null}
         <div className="space-y-6">
           {capabilitySelection}
 
@@ -3682,6 +3695,12 @@ function KeyStep({
             <ArrowUpRight className="h-3 w-3" />
           </a>
         </div>
+      ) : null}
+
+      {methodSelection ? (
+        <section aria-label="Connection method" className="mb-6 border-b border-border pb-6">
+          {methodSelection}
+        </section>
       ) : null}
 
       <div className="space-y-6">
