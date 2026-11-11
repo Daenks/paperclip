@@ -18,6 +18,7 @@ import {
   PRP_V2_EVENT_TYPES,
   REDACTED_EVENT_VALUE,
   redactAgentAdapterConfig,
+  redactPrivateKeyMaterial,
   redactEventPayload,
   redactSensitiveText,
   sanitizeRecord,
@@ -900,6 +901,26 @@ second-line\" status=401`,
       command: "pnpm agent:run",
       apiKey: REDACTED_EVENT_VALUE,
     });
+  });
+
+  it.each(["devicePrivateKeyPem", "PRIVATE_KEY_PEM", "device-private-key-pem", "signingPrivateKeyDer", "clientPem"])("redacts private material in %s recursively", (key) => {
+    const config = { command: "agent", nested: [{ [key]: "synthetic-private-material", enabled: true }] };
+    expect(redactAgentAdapterConfig(config)).toEqual({
+      command: "agent", nested: [{ [key]: REDACTED_EVENT_VALUE, enabled: true }],
+    });
+    expect(config.nested[0][key]).toBe("synthetic-private-material");
+  });
+
+  it("preserves validated secret references and redacts PEM content under arbitrary names", () => {
+    const reference = { type: "secret_ref", secretId: "55555555-5555-4555-8555-555555555555", version: "latest" };
+    const config = {
+      devicePrivateKeyPem: reference,
+      nested: [{ content: "-----BEGIN ED25519 PRIVATE KEY-----\nsynthetic-only\n-----END ED25519 PRIVATE KEY-----" }],
+      enabled: true,
+    };
+    const expected = { devicePrivateKeyPem: reference, nested: [{ content: REDACTED_EVENT_VALUE }], enabled: true };
+    expect(redactAgentAdapterConfig(config)).toEqual(expected);
+    expect(redactPrivateKeyMaterial(config)).toEqual(expected);
   });
 });
 

@@ -100,6 +100,7 @@ import { projectService } from "./projects.js";
 import { workProductService } from "./work-products.js";
 import { routineService } from "./routines.js";
 import { secretService } from "./secrets.js";
+import { redactPrivateKeyMaterial } from "../redaction.js";
 import { getConfiguredSecretProvider } from "../secrets/configured-provider.js";
 import {
   PORTABLE_CATALOG_PROVENANCE_STRING_KEYS,
@@ -2292,7 +2293,7 @@ function normalizePortableConfig(
     next[key] = entry;
   }
 
-  return next;
+  return redactPrivateKeyMaterial(next) as Record<string, unknown>;
 }
 
 function isAbsoluteCommand(value: string) {

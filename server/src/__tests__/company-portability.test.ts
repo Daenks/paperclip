@@ -635,6 +635,18 @@ describe("company portability", () => {
     expect(exported.warnings).toContain("Agent claudecoder PATH override was omitted from export because it is system-dependent.");
   });
 
+  it("excludes private identity material from exported manifests and files", async () => {
+    const agents = await agentSvc.list();
+    const privateMaterial = "synthetic-export-private-material";
+    agents[0].adapterConfig.devicePrivateKeyPem = privateMaterial;
+    agents[0].adapterConfig.nested = [{ signingPrivateKeyDer: privateMaterial, enabled: true }];
+    agentSvc.list.mockResolvedValue(agents);
+    const exported = await exportCompanyAndAgents(companyPortabilityService({} as any));
+    expect(JSON.stringify(exported)).not.toContain(privateMaterial);
+    expect(JSON.stringify(exported)).toContain("enabled");
+    expect(agents[0].adapterConfig.devicePrivateKeyPem).toBe(privateMaterial);
+  });
+
   it("does not load or emit skills when agents are included but skills are disabled", async () => {
     const portability = companyPortabilityService({} as any);
 
