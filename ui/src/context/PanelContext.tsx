@@ -1,6 +1,12 @@
 import { useCoordinatorWorkspaceEnabled } from "@/hooks/useCoordinatorWorkspaceEnabled";
-import { createContext, useCallback, useContext, useLayoutEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { SidePanelContentMode } from "@/components/side-panel";
+import {
+  resolveTaskPaneVisibility,
+  taskPaneMemoryKeyId,
+  writeTaskPaneVisibility,
+  type TaskPaneMemoryKey,
+} from "@/lib/side-pane-defaults";
 
 const STORAGE_KEY = "paperclip:panel-visible";
 
@@ -21,6 +27,12 @@ interface PanelContextValue {
   panelMaximizeRequested: boolean;
   requestPanelMaximize: () => void;
   clearPanelMaximizeRequest: () => void;
+  /**
+   * The task or chat whose pane visibility should be remembered. While set,
+   * the pane opens as it was left on that task (else the user's default), and
+   * open/close changes are saved for it. Pass null when leaving the page.
+   */
+  setPanelVisibilityMemoryKey: (key: TaskPaneMemoryKey | null) => void;
 }
 
 const PanelContext = createContext<PanelContextValue | null>(null);
@@ -51,7 +63,25 @@ export function PanelProvider({ children }: { children: ReactNode }) {
   // The experiment has an on-demand panel. Its visibility never overwrites
   // the classic workspace preference, including when the experiment is off.
   const panelVisible = coordinatorWorkspaceEnabled ? coordinatorPanelVisible : classicPanelVisible;
-  useLayoutEffect(() => setCoordinatorPanelVisible(false), [coordinatorWorkspaceEnabled, userId]);
+  const [memoryKey, setMemoryKey] = useState<TaskPaneMemoryKey | null>(null);
+  const memoryKeyRef = useRef<TaskPaneMemoryKey | null>(null);
+  const memoryKeyId = taskPaneMemoryKeyId(memoryKey);
+  const setPanelVisibilityMemoryKey = useCallback((key: TaskPaneMemoryKey | null) => {
+    memoryKeyRef.current = key;
+    setMemoryKey(previous => taskPaneMemoryKeyId(previous) === taskPaneMemoryKeyId(key) ? previous : key);
+  }, []);
+  const rememberVisibility = useCallback((visible: boolean) => {
+    if (memoryKeyRef.current) writeTaskPaneVisibility(memoryKeyRef.current, visible);
+  }, []);
+  // On entering a task/chat, restore how its pane was left, else the user's
+  // default. Without either, keep the built-in behavior: the experiment's
+  // on-demand pane starts closed, the classic pane keeps its global preference.
+  useLayoutEffect(() => {
+    const target = memoryKey ? resolveTaskPaneVisibility(memoryKey) : null;
+    if (coordinatorWorkspaceEnabled) setCoordinatorPanelVisible(target ?? false);
+    else if (target !== null) setPanelVisibleState(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coordinatorWorkspaceEnabled, userId, memoryKeyId]);
   const [panelMaximizeRequested, setPanelMaximizeRequested] = useState(false);
 
   const requestPanelMaximize = useCallback(() => {
@@ -73,21 +103,26 @@ export function PanelProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setPanelVisible = useCallback((visible: boolean) => {
+    rememberVisibility(visible);
     if (coordinatorWorkspaceEnabled) setCoordinatorPanelVisible(visible);
     else { setPanelVisibleState(visible); writePreference(visible); }
-  }, [coordinatorWorkspaceEnabled]);
+  }, [coordinatorWorkspaceEnabled, rememberVisibility]);
 
   const togglePanelVisible = useCallback(() => {
     if (coordinatorWorkspaceEnabled) {
-      setCoordinatorPanelVisible(previous => !previous);
+      setCoordinatorPanelVisible(previous => {
+        rememberVisibility(!previous);
+        return !previous;
+      });
       return;
     }
     setPanelVisibleState((prev) => {
       const next = !prev;
       writePreference(next);
+      rememberVisibility(next);
       return next;
     });
-  }, [coordinatorWorkspaceEnabled]);
+  }, [coordinatorWorkspaceEnabled, rememberVisibility]);
 
   return (
     <PanelContext.Provider
@@ -102,6 +137,7 @@ export function PanelProvider({ children }: { children: ReactNode }) {
         panelMaximizeRequested,
         requestPanelMaximize,
         clearPanelMaximizeRequest,
+        setPanelVisibilityMemoryKey,
       }}
     >
       {children}

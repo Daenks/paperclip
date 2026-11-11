@@ -15,6 +15,7 @@ import {
   readTaskSidePanelState,
   writeTaskSidePanelState,
 } from "@/lib/task-side-panel-state";
+import { writeSidePaneDefaults } from "@/lib/side-pane-defaults";
 import type { TaskPluginPanel } from "@/hooks/useTaskPluginPanels";
 import { TaskSidePanel } from "./TaskSidePanel";
 
@@ -447,6 +448,33 @@ describe("TaskSidePanel", () => {
     expect(selected?.textContent).toContain("Tasks");
     expect(container.textContent).toContain("Agent tasks agent-1 excluding task-1");
     expect(container.textContent).not.toContain("Artifacts content");
+  });
+
+  it.each([false, true])("opens a fresh task on the Settings > Profile default tab (coordinator: %s)", async coordinatorEnabled => {
+    coordinator.enabled = coordinatorEnabled;
+    writeSidePaneDefaults({ open: true, tab: "artifacts" });
+    await render(panel());
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-side-panel-tab-target")).toBe("artifacts");
+  });
+
+  it("opens Coordinator tasks on Properties when the default says so", async () => {
+    coordinator.enabled = true;
+    writeSidePaneDefaults({ open: true, tab: "properties" });
+    await render(panel());
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-side-panel-tab-target")).toBe("properties");
+  });
+
+  it("prefers a task's saved layout over the default tab", async () => {
+    writeSidePaneDefaults({ open: true, tab: "artifacts" });
+    writeTaskSidePanelState("user-1", "company-1", "task-1", {
+      state: { tabs: [taskPanelPropertiesTab()], activeTabId: "properties" },
+      launcherOpen: false,
+      userInteracted: true,
+      autoPlanHandled: false,
+      updatedAt: 1,
+    });
+    await render(panel());
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-side-panel-tab-target")).toBe("properties");
   });
 
   it("keeps an Artifacts-only layout the user chose", async () => {

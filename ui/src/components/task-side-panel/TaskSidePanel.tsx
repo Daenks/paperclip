@@ -94,6 +94,7 @@ import {
   writeTaskSidePanelState,
   type TaskSidePanelTabPayload,
 } from "@/lib/task-side-panel-state";
+import { sidePaneDefaultTab } from "@/lib/side-pane-defaults";
 import { cn } from "@/lib/utils";
 import { TaskDocumentPanel } from "./TaskDocumentPanel";
 import { parseDocumentAnnotationHash } from "@/lib/document-annotation-hash";
@@ -330,9 +331,17 @@ function TaskSidePanelForScope({
   const handledDocumentRequestRef = useRef<number | undefined>(undefined);
   const initialState = useMemo(() => {
     const restored = restoredRef.current?.state;
+    // Settings > Profile default tab, used when this task has no saved layout.
+    const preferredTab = sidePaneDefaultTab();
+    const preferredTabs = preferredTab === "properties" ? [taskPanelPropertiesTab()]
+      : preferredTab === "artifacts" ? [taskPanelArtifactsTab()]
+      : preferredTab === "tasks"
+        ? conversationAgentId ? [taskPanelAgentTasksTab()]
+          : initialSubtasksAvailableRef.current ? [taskPanelSubtasksTab()] : [taskPanelPropertiesTab()]
+      : null;
     let tabs = coordinatorWorkspaceEnabled
-      ? restoredRef.current?.userInteracted ? restored?.tabs ?? [] : []
-      : restored?.tabs ?? (conversationAgentId
+      ? restoredRef.current?.userInteracted ? restored?.tabs ?? [] : preferredTabs ?? []
+      : restored?.tabs ?? preferredTabs ?? (conversationAgentId
       ? [taskPanelAgentTasksTab()]
       : issue.conversationAgentId ? [taskPanelArtifactsTab()] : [taskPanelPropertiesTab()]);
     // A tab saved while Agent Chat was on has nothing to render without it;
@@ -345,7 +354,7 @@ function TaskSidePanelForScope({
     // Chats used to open on Artifacts by default; move an untouched default
     // onto the agent's tasks. An Artifacts tab the user chose to keep stays.
     if (!coordinatorWorkspaceEnabled && conversationAgentId && !restoredRef.current?.userInteracted
-      && tabs.length === 1 && tabs[0]!.id === "artifacts") {
+      && preferredTab !== "artifacts" && tabs.length === 1 && tabs[0]!.id === "artifacts") {
       tabs = [taskPanelAgentTasksTab()];
     }
     if (!initialSubtasksAvailableRef.current) {
@@ -353,7 +362,7 @@ function TaskSidePanelForScope({
     } else if (!coordinatorWorkspaceEnabled && !subtasksDismissedRef.current) {
       tabs = insertSubtasksAfterProperties(tabs);
     }
-    const requestedActive = restored?.activeTabId ?? "properties";
+    const requestedActive = restored?.activeTabId ?? preferredTabs?.[0]?.id ?? "properties";
     return {
       tabs,
       activeTabId: tabs.some((tab) => tab.id === requestedActive)

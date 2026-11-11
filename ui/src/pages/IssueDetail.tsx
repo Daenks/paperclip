@@ -3281,6 +3281,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     setPanelVisible,
     requestPanelMaximize,
     clearPanelMaximizeRequest,
+    setPanelVisibilityMemoryKey,
   } = usePanel();
   const {
     setBreadcrumbs,
@@ -4155,6 +4156,16 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     return () => { observer.disconnect(); window.clearTimeout(timeout); };
   }, [coordinatorWorkspaceEnabled, issue?.id, location.hash, location.key]);
   const taskPanelAccountScope = coordinatorWorkspaceEnabled ? `coordinator:${currentUserId ?? "anonymous"}` : currentUserId ?? "anonymous";
+  // Remember per task/chat whether the side pane was open, and restore it (or
+  // the user's Settings > Profile default) on return. Desktop only.
+  useLayoutEffect(() => {
+    if (isMobile || !issue?.id || !issue.companyId) {
+      setPanelVisibilityMemoryKey?.(null);
+      return;
+    }
+    setPanelVisibilityMemoryKey?.({ accountScope: taskPanelAccountScope, companyId: issue.companyId, issueId: issue.id });
+  }, [isMobile, issue?.id, issue?.companyId, taskPanelAccountScope, setPanelVisibilityMemoryKey]);
+  useLayoutEffect(() => () => setPanelVisibilityMemoryKey?.(null), [setPanelVisibilityMemoryKey]);
   const { panels: pluginPanels, isLoading: pluginPanelsLoading } = useTaskPluginPanels(issue, taskChatShellEnabled);
   const revealedPluginPanels = useRef(new Set<string>());
   const openedPluginPanelKeys = useRef(new Set<string>());

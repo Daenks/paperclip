@@ -131,11 +131,13 @@ export function Layout({ sidebarSections }: { sidebarSections?: ReactNode }) {
   const isCompanySettingsRoute = shellRoute.builtInContextualSurface === "settings";
   const companyPathSegments = shellRoute.companySegments;
   const isTaskDetailRoute = shellRoute.isTaskDetail;
-  useLayoutEffect(() => {
-    if (coordinatorWorkspaceEnabled) setPanelVisible(false);
-  }, [coordinatorWorkspaceEnabled, location.pathname, setPanelVisible]);
   const { enabled: agentChatEnabled } = useAgentChatEnabled();
   const isAgentChatRoute = agentChatEnabled && companyPathSegments[0]?.toLowerCase() === "chats";
+  // Task and chat pages restore their own pane state (see PanelContext).
+  const restoresOwnPaneState = isTaskDetailRoute || isAgentChatRoute;
+  useLayoutEffect(() => {
+    if (coordinatorWorkspaceEnabled && !restoresOwnPaneState) setPanelVisible(false);
+  }, [coordinatorWorkspaceEnabled, location.pathname, restoresOwnPaneState, setPanelVisible]);
   // Chat keeps its header beside the agent sidebar, including before an agent is selected.
   const useStreamlinedTaskDetailShell = streamlinedUiEnabled && (isTaskDetailRoute || isAgentChatRoute);
   const useInsetTaskDetailHeader = useStreamlinedTaskDetailShell && !isAgentChatRoute;
