@@ -71,6 +71,31 @@ const providerNames: Record<ChatProvider, string> = {
 
 const knownProviders = new Set(Object.keys(providerNames));
 
+// Mattermost server URL and team ID from the last successful connect, per
+// company, so another bot for the same server only needs its token. The
+// bot token is never stored.
+const MATTERMOST_DEFAULTS_KEY = "paperclip.chat.mattermost.defaults";
+
+function readMattermostDefaults(companyId: string): { baseUrl: string; teamId: string } | null {
+  try {
+    const all = JSON.parse(localStorage.getItem(MATTERMOST_DEFAULTS_KEY) ?? "{}");
+    const saved = all?.[companyId];
+    return typeof saved?.baseUrl === "string" && typeof saved?.teamId === "string" ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveMattermostDefaults(companyId: string, baseUrl: string, teamId: string): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(MATTERMOST_DEFAULTS_KEY) ?? "{}") ?? {};
+    all[companyId] = { baseUrl, teamId };
+    localStorage.setItem(MATTERMOST_DEFAULTS_KEY, JSON.stringify(all));
+  } catch {
+    // Storage unavailable; the fields just start empty next time.
+  }
+}
+
 function isProvider(value: string | null): value is ChatProvider {
   return value !== null && knownProviders.has(value);
 }
@@ -389,7 +414,13 @@ function ChatSdkEndpointSetup() {
       }
     },
     onMutate: () => setSetupError(null),
-    onSuccess: (next) => {
+    onSuccess: (next, variables) => {
+      const baseUrl = variables.values?.baseUrl?.trim();
+      const teamId = variables.values?.teamId?.trim();
+      if (provider === "mattermost" && baseUrl && teamId &&
+        (next.setup?.step === "test" || next.setup?.step === "complete")) {
+        saveMattermostDefaults(next.companyId, baseUrl, teamId);
+      }
       setSetupError(null);
       setViewedStep(null);
       syncEndpointSnapshot(next);
@@ -765,6 +796,16 @@ function ProviderConnectStep({
   const { userId, settled: identitySettled } = useAccountIdentity();
   const { pushToast } = useToast();
   const navigate = useNavigate();
+  useEffect(() => {
+    if (provider !== "mattermost" || repairing) return;
+    const saved = readMattermostDefaults(endpoint.companyId);
+    if (!saved) return;
+    setCredentials((current) => ({
+      ...current,
+      baseUrl: current.baseUrl ?? saved.baseUrl,
+      teamId: current.teamId ?? saved.teamId,
+    }));
+  }, [provider, repairing, endpoint.companyId, setCredentials]);
   const slackBotToken = (credentials.botToken ?? "").trim();
   const slackBotTokenInvalid = provider === "slack" && slackBotToken.length > 0 &&
     !slackBotToken.startsWith("xoxb-");
