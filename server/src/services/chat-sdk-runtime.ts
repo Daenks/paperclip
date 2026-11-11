@@ -1936,6 +1936,12 @@ function registerCallbacks(
           ...githubPublicAttachmentsFromMessage(message),
         );
       }
+      // Mattermost events carry no channel name. Load it (cached by the
+      // adapter) so a destination first seen through a message gets a
+      // readable label instead of the raw channel ID.
+      if (provider === "mattermost" && !thread.channel.name) {
+        await thread.channel.fetchMetadata().catch(() => undefined);
+      }
       await trackCallback(
         async () =>
           await callbacks.onMessage({

@@ -159,6 +159,11 @@ export interface MattermostAdapterConfig {
   webSocketFactory?: (url: string) => WebSocket;
 }
 
+/** Readable destination label: the display name, else the URL name. */
+export function mattermostChannelLabel(channel: Pick<MattermostChannel, "name" | "display_name">): string {
+  return channel.display_name?.trim() || `~${channel.name}`;
+}
+
 export class MattermostApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -326,7 +331,7 @@ export async function listMattermostBotChannels(input: {
       providerResourceId: channel.id,
       parentProviderResourceId: teamId,
       type: "channel",
-      label: `~${channel.name}`,
+      label: mattermostChannelLabel(channel),
       providerUrl: `${baseUrl}/${encodeURIComponent(team.name)}/channels/${encodeURIComponent(channel.name)}`,
       metadata: { source: "provider_inventory", private: channel.type === "P" },
     }));
@@ -1207,17 +1212,31 @@ export class MattermostAdapter implements Adapter<MattermostThreadId, Mattermost
     };
   }
 
+  private readonly channelInfoCache = new Map<string, { info: ChannelInfo; expiresAt: number }>();
+
   async fetchChannelInfo(channelId: string): Promise<ChannelInfo> {
     const match = /^mattermost:([cdg]):([a-z0-9]{26})$/.exec(channelId);
     if (!match) throw new ValidationError(ADAPTER_NAME, `Invalid Mattermost channel ID: ${channelId}`);
+    const cached = this.channelInfoCache.get(channelId);
+    if (cached && cached.expiresAt > Date.now()) return cached.info;
     const channel = await this.api<MattermostChannel>(`/channels/${match[2]}`, { description: "channel lookup" });
-    return {
+    let name = mattermostChannelLabel(channel);
+    if (channel.type === "D") {
+      // A DM's channel name is "<userId>__<userId>"; name it after the other person.
+      const otherId = channel.name.split("__").find((id) => id && id !== this._botUserId);
+      const other = otherId ? await this.rememberUser(otherId) : null;
+      name = other ? `@${other.username}` : "Direct message";
+    }
+    const info: ChannelInfo = {
       id: channelId,
-      name: channel.display_name || channel.name,
+      name,
       isDM: channel.type === "D",
       channelVisibility: channel.type === "O" ? "workspace" : "private",
       metadata: { teamId: channel.team_id, type: channel.type },
     };
+    // Renames show up within five minutes.
+    this.channelInfoCache.set(channelId, { info, expiresAt: Date.now() + 5 * 60_000 });
+    return info;
   }
 
   async getUser(userId: string): Promise<UserInfo | null> {

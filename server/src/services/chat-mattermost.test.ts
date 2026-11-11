@@ -221,6 +221,19 @@ describe("MattermostAdapter inbound events", () => {
   });
 });
 
+describe("MattermostAdapter channel names", () => {
+  it("labels channels by display name and DMs by the other person, with caching", async () => {
+    const { adapter, calls } = await adapterWith({
+      [`GET /api/v4/channels/${DM}`]: () => json({ id: DM, type: "D", team_id: "", name: `${BOT}__${USER}`, display_name: "" }),
+    });
+    await expect(adapter.fetchChannelInfo(`mattermost:c:${CHANNEL}`)).resolves.toMatchObject({ name: "Town Square", isDM: false });
+    await expect(adapter.fetchChannelInfo(`mattermost:d:${DM}`)).resolves.toMatchObject({ name: "@daniel", isDM: true });
+    const lookups = calls.filter((call) => call.path === `/api/v4/channels/${CHANNEL}`).length;
+    await adapter.fetchChannelInfo(`mattermost:c:${CHANNEL}`);
+    expect(calls.filter((call) => call.path === `/api/v4/channels/${CHANNEL}`)).toHaveLength(lookups);
+  });
+});
+
 describe("MattermostAdapter outbound", () => {
   it("posts replies into the thread and returns the post id", async () => {
     const { adapter, calls } = await adapterWith({

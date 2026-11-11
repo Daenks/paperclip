@@ -19983,7 +19983,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         expect.objectContaining({
           providerResourceId: channelId,
           parentProviderResourceId: teamId,
-          label: "~agent-lab",
+          label: "Agent Lab",
           enabled: false,
         }),
       ]);
