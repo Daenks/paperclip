@@ -6,8 +6,8 @@ import type { PaperclipQuestionResponse, PaperclipQuestionSet } from "@paperclip
 import { QuestionForm } from "./QuestionForm";
 
 vi.mock("./TaskChatRichInput", () => ({
-  TaskChatRichInput: ({ value, onChange, onSubmit }: { value: string; onChange(value: string): void; onSubmit(): void }) =>
-    <textarea aria-label="Answer" value={value} onChange={event => onChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && event.metaKey) onSubmit(); }} />,
+  TaskChatRichInput: ({ value, onChange, onSubmit, autoFocus }: { value: string; onChange(value: string): void; onSubmit(): void; autoFocus?: boolean }) =>
+    <textarea aria-label="Answer" data-autofocus={autoFocus ? "true" : "false"} value={value} onChange={event => onChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && event.metaKey) onSubmit(); }} />,
 }));
 vi.mock("@/components/MarkdownBody", () => ({ MarkdownBody: ({ children }: { children: string }) => <div>{children}</div> }));
 
@@ -32,6 +32,21 @@ describe("QuestionForm initial text", () => {
     });
   }
   async function remount(set = questionSet) { await act(async () => root.unmount()); root = createRoot(container); await render(set); }
+  it("does not focus the answer on mount in the decision presentation, only after the operator pages", async () => {
+    const twoQuestions: PaperclipQuestionSet = { schema: "paperclip.question_set.v1", questions: [
+      { id: "audience", prompt: "Who is the audience?", required: false, answerMode: "text" },
+      { id: "tone", prompt: "What tone should we use?", required: false, answerMode: "text" },
+    ] };
+    await act(async () => root.render(<QuestionForm id="inbox" presentation="decision" questionSet={twoQuestions} draftKey="question-inbox" onSubmit={submit} />));
+    expect(input().dataset.autofocus).toBe("false");
+    await act(async () => Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Next")!.click());
+    expect(container.textContent).toContain("What tone should we use?");
+    expect(input().dataset.autofocus).toBe("true");
+  });
+  it("keeps focusing the answer on mount in the default presentation", async () => {
+    await render();
+    expect(input().dataset.autofocus).toBe("true");
+  });
   it("shows exact editable text without sending until the operator submits", async () => {
     await render();
     expect(input().value).toBe("  Draft\n漢字\n");

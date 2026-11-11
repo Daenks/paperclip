@@ -298,9 +298,15 @@ function QuestionFormForRequest({
   const [attemptedQuestions, setAttemptedQuestions] = useState<Record<string, boolean>>({});
   const promptRef = useRef<HTMLParagraphElement>(null);
   const previousPage = useRef(page);
+  // The decision presentation lists many open questions on one page (the
+  // Coordinator inbox). Focusing an answer field on mount there pulls focus
+  // and scroll to whichever card mounted last, so answer fields only take
+  // focus after the operator acts on this form (pages, or opens "Other").
+  const [answerFocusArmed, setAnswerFocusArmed] = useState(presentation !== "decision");
 
   useEffect(() => {
     if (previousPage.current !== page) {
+      setAnswerFocusArmed(true);
       promptRef.current?.focus();
       previousPage.current = page;
     }
@@ -385,6 +391,7 @@ function QuestionFormForRequest({
 
   function toggleCustom() {
     const active = !isCustomActive;
+    setAnswerFocusArmed(true);
     setCustomActive((current) => ({ ...current, [question.id]: active }));
     updateAnswer({
       ...answer,
@@ -602,7 +609,7 @@ function QuestionFormForRequest({
             placeholder="Write your answer"
             imageUploadHandler={imageUploadHandler}
             mentions={mentions}
-            autoFocus
+            autoFocus={answerFocusArmed}
             onUploadingChange={setInputUploading}
             onSubmit={() => {
               progressOrSubmit();
@@ -672,7 +679,7 @@ function QuestionFormForRequest({
                   onChange={(value) =>
                     updateAnswer({ ...answer, customText: value })
                   }
-                  autoFocus
+                  autoFocus={answerFocusArmed}
                   imageUploadHandler={imageUploadHandler}
                   mentions={mentions}
                   onUploadingChange={setInputUploading}
