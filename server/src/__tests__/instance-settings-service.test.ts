@@ -137,6 +137,7 @@ describe("instance settings service", () => {
       enableArtifactsV1: true,
       enableChatConnectors: false,
       enableGitHubReviewBots: false,
+      enableGitea: false,
       enableMemoryConnectors: false,
       enablePaperclipNotebook: false,
       enableGoogleWorkspaceConnector: false,

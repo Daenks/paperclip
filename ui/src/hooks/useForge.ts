@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { effectiveProjectForge, type Forge } from "@paperclipai/shared";
 import { instanceSettingsApi } from "@/api/instanceSettings";
-import { useCompany } from "@/context/CompanyContext";
+import { useOptionalCompany } from "@/context/CompanyContext";
 import { queryKeys } from "@/lib/queryKeys";
 
 /** The instance switch for Gitea (`experimental.enableGitea`). */
@@ -19,7 +19,7 @@ export function useEffectiveForge(project?: { sourceForge?: Forge | null } | nul
   giteaEnabled: boolean;
   companyDefault: Forge;
 } {
-  const { selectedCompany } = useCompany();
+  const selectedCompany = useOptionalCompany()?.selectedCompany ?? null;
   const giteaEnabled = useGiteaEnabled();
   const companyDefault = effectiveProjectForge(selectedCompany, null, { giteaEnabled });
   return { forge: effectiveProjectForge(selectedCompany, project ?? null, { giteaEnabled }), giteaEnabled, companyDefault };

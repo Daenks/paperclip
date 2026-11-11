@@ -495,18 +495,6 @@ export function InstanceExperimentalSettings() {
         />
 
         <ExperimentalToggleCard
-          title="GitHub review bots"
-          description="Connect agents to GitHub with their own App identity to review pull requests and respond to issues."
-          footnote="Independent of Chat connectors. Turning this off hides setup and management; existing bots keep running. GitHub tool connections stay available."
-          checked={experimentalQuery.data?.enableGitHubReviewBots === true}
-          onCheckedChange={(checked) => toggleMutation.mutate({ enableGitHubReviewBots: checked })}
-          disabled={toggleMutation.isPending}
-          settingKey="enableGitHubReviewBots"
-          managed={managedKeys.enableGitHubReviewBots}
-          ariaLabel="Toggle GitHub review bots experimental setting"
-        />
-
-        <ExperimentalToggleCard
           title="Gitea"
           description="Use a self-hosted Gitea as a source forge: the Gitea connection, Gitea project repositories, agent Git access and the Gitea review bot."
           footnote="Each company then chooses GitHub or Gitea as its default forge in Company settings. GitHub keeps working either way."
@@ -516,6 +504,18 @@ export function InstanceExperimentalSettings() {
           settingKey="enableGitea"
           managed={managedKeys.enableGitea}
           ariaLabel="Toggle Gitea experimental setting"
+        />
+
+        <ExperimentalToggleCard
+          title="GitHub review bots"
+          description="Connect agents to GitHub with their own App identity to review pull requests and respond to issues."
+          footnote="Independent of Chat connectors. Turning this off hides setup and management; existing bots keep running. GitHub tool connections stay available."
+          checked={experimentalQuery.data?.enableGitHubReviewBots === true}
+          onCheckedChange={(checked) => toggleMutation.mutate({ enableGitHubReviewBots: checked })}
+          disabled={toggleMutation.isPending}
+          settingKey="enableGitHubReviewBots"
+          managed={managedKeys.enableGitHubReviewBots}
+          ariaLabel="Toggle GitHub review bots experimental setting"
         />
 
         <ExperimentalToggleCard

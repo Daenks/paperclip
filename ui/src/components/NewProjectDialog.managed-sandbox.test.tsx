@@ -30,12 +30,10 @@ vi.mock("../context/DialogContext", () => ({
   useDialog: () => ({ newProjectOpen: true, closeNewProject: vi.fn() }),
 }));
 
-vi.mock("../context/CompanyContext", () => ({
-  useCompany: () => ({
-    selectedCompanyId: "company-1",
-    selectedCompany: { id: "company-1", name: "Paperclip" },
-  }),
-}));
+vi.mock("../context/CompanyContext", () => {
+  const company = { selectedCompanyId: "company-1", selectedCompany: { id: "company-1", name: "Paperclip" } };
+  return { useCompany: () => company, useOptionalCompany: () => company };
+});
 
 vi.mock("./MarkdownEditor", () => ({
   MarkdownEditor: () => <div data-testid="markdown-editor" />,

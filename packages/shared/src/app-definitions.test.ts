@@ -1484,6 +1484,12 @@ describe("AppDefinition catalog", () => {
     ).sort();
     expect(required).toEqual([
       "clickhouse:mcp-oauth:serviceId",
+      // Self-hosted Gitea: the instance host, and for remote methods the gitea-mcp host.
+      "gitea:local-stdio:host",
+      "gitea:mcp-access-token:host",
+      "gitea:mcp-access-token:mcpHost",
+      "gitea:mcp-own-oauth:host",
+      "gitea:mcp-own-oauth:mcpHost",
       "honcho:mcp-api-key:workspaceId",
       "make:mcp-api-token:zone",
       "shopify:storefront-mcp:storeDomain",
