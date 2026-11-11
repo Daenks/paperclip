@@ -349,6 +349,7 @@ import {
   authorizeFailedChatRunRetryWake,
 } from "./durable-chat-wakeup.js";
 import { prepareHeartbeatGitHubLaunchers } from "./heartbeat-github-launchers.js";
+import { prepareHostGiteaEnvironment } from "./gitea/run-credentials.js";
 import {
   cleanupGitHubOperationLaunchers,
   prepareGitHubExecutionEnvironment,
@@ -3224,6 +3225,13 @@ export function heartbeatService(
       }));
       runtimeConfig = { ...runtimeConfig, env: gitExecutionEnv };
       for (const key of MANAGED_GITHUB_TOKEN_KEYS) secretKeys.add(key);
+      if (useHostGitHub) {
+        const gitea = await timePreparation("gitea_environment", () => prepareHostGiteaEnvironment(db, {
+          companyId: agent.companyId, agentId: agent.id, runId: run.id, env: gitExecutionEnv,
+        }));
+        runtimeConfig = { ...runtimeConfig, env: gitea.env };
+        for (const key of gitea.secretKeys) secretKeys.add(key);
+      }
       context.githubAuthenticationMode = useHostGitHub ? "host" : "managed";
       if (!useHostGitHub && !providerApiPlacement) {
         const githubLaunchers = await timePreparation("github_launchers", () => prepareHeartbeatGitHubLaunchers({

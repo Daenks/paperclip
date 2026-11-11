@@ -10,7 +10,7 @@ type PreparationPhase = "environment_selection" | "execution_configuration" | "s
   | "chat_retry_admission" | "workspace_selection" | "dependency_readiness" | "issue_checkout"
   | "instance_settings" | "workspace_context" | "project_context" | "plan_wake_routing"
   | "routine_environment" | "responsible_user" | "execution_start"
-  | "workspace" | "github_environment" | "github_launchers" | "run_output"
+  | "workspace" | "github_environment" | "gitea_environment" | "github_launchers" | "run_output"
   | "workspace_validation" | "runtime_services" | "instructions" | "runtime_selection"
   | "configuration_mentions" | "configuration_github_identity" | "configuration_secrets"
   | "configuration_ai_runtime" | "configuration_skills" | "configuration_skills_adopted" | "configuration_connector_assignments"

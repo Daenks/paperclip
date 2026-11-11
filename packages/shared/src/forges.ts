@@ -15,3 +15,9 @@ export function effectiveProjectForge(
   if (candidate === "gitea" && options.giteaEnabled) return "gitea";
   return "github";
 }
+
+/**
+ * A project repository catalog id: a GitHub repository id (digits) or a Gitea catalog id
+ * (`gitea:<origin>:<repository id>`).
+ */
+export const PROJECT_REPOSITORY_ID_PATTERN = /^(?:\d+|gitea:https?:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?:\d+)$/;

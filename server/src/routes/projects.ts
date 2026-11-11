@@ -1,3 +1,4 @@
+import { PROJECT_REPOSITORY_ID_PATTERN } from "@paperclipai/shared";
 import { projectEnvironmentOptions } from "../services/project-environments.js";
 import { listProtectedEnvironmentKeyHolders, protectedEnvironmentKeyWarnings } from "../services/protected-environment-keys.js";
 import { projectGitAuthorizationService } from "../services/project-git-authorization.js";
@@ -321,7 +322,7 @@ export function projectRoutes(db: Db) {
     res.json(await projectGitAuthorizationService(db).set(project.companyId, project.id, req.actor.userId, req.body.grantId));
   });
 
-  router.put("/projects/:id/repositories", validate(z.object({ repositoryIds: z.array(z.string().regex(/^\d+$/)) })), async (req, res) => {
+  router.put("/projects/:id/repositories", validate(z.object({ repositoryIds: z.array(z.string().max(300).regex(PROJECT_REPOSITORY_ID_PATTERN)) })), async (req, res) => {
     assertBoard(req);
     const project = await getAccessibleResource(req, res, svc.getById(req.params.id as string), "Project not found");
     if (!project) return;

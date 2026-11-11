@@ -1,3 +1,4 @@
+import { PROJECT_REPOSITORY_ID_PATTERN } from "@paperclipai/shared";
 import { z } from "zod";
 import { mcpAgentModelConfig } from "./agent-config.js";
 import {
@@ -145,7 +146,7 @@ export const expandedMcpCapabilities: Capability[] = [
   },
   {
     name: "paperclip_set_project_repositories", configure: true, destructive: true, description: "Replace a project's repository selection with IDs from paperclip_list_project_repositories. Requires configuration consent and normal repository access.",
-    schema: z.object({ ...project, requestId, repositoryIds: z.array(z.string().regex(/^\d+$/)).max(100) }).strict(),
+    schema: z.object({ ...project, requestId, repositoryIds: z.array(z.string().max(300).regex(PROJECT_REPOSITORY_ID_PATTERN)).max(100) }).strict(),
     run: async (p, a, api) => ({ project: projectOutput(await api(p, "PUT", `/projects/${pathId(a.projectId)}/repositories`, { repositoryIds: a.repositoryIds })) }),
   },
   {

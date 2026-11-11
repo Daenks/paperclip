@@ -282,9 +282,9 @@ export function classifyGiteaReviewEvent(event: string | null, body: unknown, bo
   const prNumber = text(pr.number) || text(payload.number) || text(record(payload.issue).number);
   if (!headSha || !prNumber) return { review: false, reason: "incomplete_pull_request" };
   const variables = {
-    repository, prNumber, prTitle: text(pr.title).slice(0, 200), prUrl: text(pr.html_url),
-    headSha, headRef: text(head.ref), baseRef: text(base.ref), action, trigger,
-    commentBody: commentBody.replace(/\s+/g, " ").slice(0, 2000), sender,
+    repository, prNumber, prTitle: text(pr.title).slice(0, 200) || "(untitled)", prUrl: text(pr.html_url) || "(no link)",
+    headSha, headRef: text(head.ref) || "(unknown)", baseRef: text(base.ref) || "(unknown)", action, trigger,
+    commentBody: commentBody.replace(/\s+/g, " ").slice(0, 2000) || "(none)", sender: sender || "(unknown)",
   };
   const idempotencyKey = event === "pull_request"
     ? `gitea-review:${repository.toLowerCase()}#${prNumber}@${headSha}`
