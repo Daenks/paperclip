@@ -3347,6 +3347,20 @@
       "when": 1794589077537,
       "tag": "0479_short_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 480,
+      "version": "7",
+      "when": 1794604939876,
+      "tag": "0480_gitea_default_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 481,
+      "version": "7",
+      "when": 1794604939877,
+      "tag": "0481_gitea_review_bots",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "experimentalFeatureKey": "enableGitea",
+  "slug": "gitea",
+  "name": "Gitea",
+  "description": "Use a self-hosted Gitea for project repositories, agent Git access, repository tools and the review bot.",
+  "categories": [
+    "developer"
+  ],
+  "featured": false,
+  "branding": {
+    "logoUrl": "/brands/apps/gitea.svg"
+  },
+  "urlPatterns": [],
+  "docsUrl": "https://gitea.com/gitea/gitea-mcp",
+  "methods": [
+    {
+      "key": "mcp-access-token",
+      "transport": "mcp_remote",
+      "auth": "api_key",
+      "ownershipModes": [
+        "customer"
+      ],
+      "whenToUse": "Use a Gitea access token with a gitea-mcp server you run in HTTP mode.",
+      "defaults": {
+        "serverUrlTemplate": "https://{mcpHost}:{mcpPort}/mcp"
+      },
+      "guidanceMd": "Run `gitea-mcp -t http -H https://<your Gitea>` behind HTTPS, then enter your Gitea host, the gitea-mcp host and a Gitea access token. Paperclip sends the token to gitea-mcp per request; agents also use it for Git over HTTPS on the Gitea host.",
+      "riskTier": "S3",
+      "label": "Use an access token",
+      "tenantFields": [
+        {
+          "key": "host",
+          "label": "Gitea host",
+          "type": "text",
+          "required": true,
+          "placeholder": "gitea.example.com",
+          "helperMd": "Hostname of your Gitea instance, without https:// or a path. Paperclip uses it for repository access, Git over HTTPS and the review bot.",
+          "validation": {
+            "pattern": "^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$",
+            "maxLength": 253
+          }
+        },
+        {
+          "key": "port",
+          "label": "Gitea HTTPS port",
+          "type": "text",
+          "required": false,
+          "defaultValue": "443",
+          "placeholder": "443",
+          "helperMd": "Leave 443 unless your Gitea serves HTTPS on another port.",
+          "validation": {
+            "pattern": "^[0-9]{1,5}$",
+            "maxLength": 5
+          }
+        },
+        {
+          "key": "mcpHost",
+          "label": "gitea-mcp host",
+          "type": "text",
+          "required": true,
+          "placeholder": "gitea-mcp.example.com",
+          "helperMd": "Hostname where you run `gitea-mcp -t http` (behind HTTPS). Paperclip connects to https://<host>:<port>/mcp.",
+          "validation": {
+            "pattern": "^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$",
+            "maxLength": 253
+          }
+        },
+        {
+          "key": "mcpPort",
+          "label": "gitea-mcp HTTPS port",
+          "type": "text",
+          "required": false,
+          "defaultValue": "443",
+          "placeholder": "443",
+          "validation": {
+            "pattern": "^[0-9]{1,5}$",
+            "maxLength": 5
+          }
+        }
+      ],
+      "credentialFields": [
+        {
+          "key": "authorization",
+          "label": "Gitea access token",
+          "type": "password",
+          "required": true,
+          "secret": true,
+          "placeholder": "Paste a Gitea access token",
+          "helperMd": "Create the token in Gitea under Settings → Applications. Give it repository read and write, issue and pull request access for what agents should do. Paperclip uses the same token for Git over HTTPS."
+        }
+      ],
+      "keyPlacement": {
+        "location": "header",
+        "name": "Authorization",
+        "prefix": "Bearer "
+      },
+      "consoleLinks": {
+        "docs": "https://gitea.com/gitea/gitea-mcp"
+      },
+      "warnings": [
+        "A token is a secret; do not put it in a URL. The token cannot exceed its owner's Gitea access.",
+        "gitea-mcp exposes write tools that create issues, pull requests, branches and commits. Review the discovered catalog and Paperclip action policies."
+      ]
+    },
+    {
+      "key": "mcp-own-oauth",
+      "transport": "mcp_remote",
+      "auth": "oauth",
+      "ownershipModes": [
+        "customer"
+      ],
+      "whenToUse": "Sign in with a Gitea OAuth2 application you register, through a gitea-mcp server running with -oauth.",
+      "defaults": {
+        "serverUrlTemplate": "https://{mcpHost}:{mcpPort}/mcp"
+      },
+      "guidanceMd": "Run `gitea-mcp -t http -oauth -oauth-public-url https://<gitea-mcp host> -H https://<your Gitea>`. In Gitea, create an OAuth2 application under Settings → Applications with the callback URL below, then enter its client ID and secret. A person signs in once; Paperclip refreshes the token and uses it for repository tools and Git over HTTPS.",
+      "riskTier": "S3",
+      "label": "Use your own Gitea OAuth2 app",
+      "tenantFields": [
+        {
+          "key": "host",
+          "label": "Gitea host",
+          "type": "text",
+          "required": true,
+          "placeholder": "gitea.example.com",
+          "helperMd": "Hostname of your Gitea instance, without https:// or a path. Paperclip uses it for repository access, Git over HTTPS and the review bot.",
+          "validation": {
+            "pattern": "^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$",
+            "maxLength": 253
+          }
+        },
+        {
+          "key": "port",
+          "label": "Gitea HTTPS port",
+          "type": "text",
+          "required": false,
+          "defaultValue": "443",
+          "placeholder": "443",
+          "helperMd": "Leave 443 unless your Gitea serves HTTPS on another port.",
+          "validation": {
+            "pattern": "^[0-9]{1,5}$",
+            "maxLength": 5
+          }
+        },
+        {
+          "key": "mcpHost",
+          "label": "gitea-mcp host",
+          "type": "text",
+          "required": true,
+          "placeholder": "gitea-mcp.example.com",
+          "helperMd": "Hostname where you run `gitea-mcp -t http` (behind HTTPS). Paperclip connects to https://<host>:<port>/mcp.",
+          "validation": {
+            "pattern": "^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$",
+            "maxLength": 253
+          }
+        },
+        {
+          "key": "mcpPort",
+          "label": "gitea-mcp HTTPS port",
+          "type": "text",
+          "required": false,
+          "defaultValue": "443",
+          "placeholder": "443",
+          "validation": {
+            "pattern": "^[0-9]{1,5}$",
+            "maxLength": 5
+          }
+        }
+      ],
+      "consoleLinks": {
+        "docs": "https://docs.gitea.com/development/oauth2-provider"
+      },
+      "warnings": [
+        "Gitea OAuth2 tokens carry the signed-in user's full Gitea access unless the application is restricted."
+      ],
+      "oauthClientSecretRequired": true
+    },
+    {
+      "key": "local-stdio",
+      "transport": "local_stdio",
+      "auth": "api_key",
+      "ownershipModes": [
+        "customer"
+      ],
+      "whenToUse": "Run gitea-mcp on the Paperclip server over stdio with a Gitea access token.",
+      "defaults": {
+        "templateKey": "paperclip.gitea-mcp"
+      },
+      "guidanceMd": "Install the `gitea-mcp` binary on the Paperclip server's PATH (for example `go install gitea.com/gitea/gitea-mcp@latest`). Paperclip starts it per connection with your Gitea host and token.",
+      "riskTier": "S3",
+      "label": "Run gitea-mcp on the Paperclip server",
+      "tenantFields": [
+        {
+          "key": "host",
+          "label": "Gitea host",
+          "type": "text",
+          "required": true,
+          "placeholder": "gitea.example.com",
+          "helperMd": "Hostname of your Gitea instance, without https:// or a path. Paperclip uses it for repository access, Git over HTTPS and the review bot.",
+          "validation": {
+            "pattern": "^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$",
+            "maxLength": 253
+          }
+        },
+        {
+          "key": "port",
+          "label": "Gitea HTTPS port",
+          "type": "text",
+          "required": false,
+          "defaultValue": "443",
+          "placeholder": "443",
+          "helperMd": "Leave 443 unless your Gitea serves HTTPS on another port.",
+          "validation": {
+            "pattern": "^[0-9]{1,5}$",
+            "maxLength": 5
+          }
+        }
+      ],
+      "credentialFields": [
+        {
+          "key": "GITEA_ACCESS_TOKEN",
+          "label": "Gitea access token",
+          "type": "password",
+          "required": true,
+          "secret": true,
+          "placeholder": "Paste a Gitea access token",
+          "helperMd": "Create the token in Gitea under Settings → Applications. Give it repository read and write, issue and pull request access for what agents should do. Paperclip uses the same token for Git over HTTPS."
+        }
+      ],
+      "keyPlacement": {
+        "location": "env",
+        "name": "GITEA_ACCESS_TOKEN"
+      },
+      "consoleLinks": {
+        "docs": "https://gitea.com/gitea/gitea-mcp"
+      },
+      "warnings": [
+        "gitea-mcp exposes write tools that create issues, pull requests, branches and commits. Review the discovered catalog and Paperclip action policies."
+      ]
+    }
+  ]
+}

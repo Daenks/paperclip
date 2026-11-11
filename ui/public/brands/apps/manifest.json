@@ -721,6 +721,12 @@
       "provider": "Unikraft",
       "catalogVisible": true,
       "localAsset": "/brands/apps/unikraft.svg"
+    },
+    {
+      "slug": "gitea",
+      "provider": "Gitea",
+      "catalogVisible": true,
+      "localAsset": "/brands/apps/gitea.svg"
     }
   ]
 }

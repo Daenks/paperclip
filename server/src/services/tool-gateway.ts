@@ -1,3 +1,4 @@
+import os from "node:os";
 import { assertAgentToolAssignmentInteractions } from "./connection-management.js";
 import { isNewHumanIntentAfterToolRejection } from "./tool-action-replay-intent.js";
 import { approvalSnapshotsMatch, approvalTargetChangeMessage, oauthApprovalConfig,
@@ -34,6 +35,7 @@ import { boundedMcpToolName } from "./mcp-tool-names.js";
 import { browserUseService } from "./browser-use.js";
 import { isBrowserUseConnection } from "./browser-use-client.js";
 import { COGNEE_STDIO_TEMPLATE, cogneeCloudUrl, callCogneeCloud } from "./cognee-connection.js";
+import { giteaConnectionHost } from "./gitea/credentials.js";
 import { HttpError } from "../errors.js";
 import { authorizationService, canActorReadIssuePrivacy, type AuthorizationActor } from "./authorization.js";
 import { claimSlackRateLimitRetry } from "./connectors/slack-retry.js";
@@ -648,6 +650,12 @@ const BUILTIN_LOCAL_STDIO_RUNTIME_TEMPLATES: Record<
     command: null,
     args: [],
     envKeys: [],
+  },  // gitea-mcp (gitea.com/gitea/gitea-mcp) over stdio. GITEA_HOST comes from the
+  // connection's Gitea host setting; the token from its credential.
+  "paperclip.gitea-mcp": {
+    command: "gitea-mcp",
+    args: ["-t", "stdio"],
+    envKeys: ["GITEA_ACCESS_TOKEN"],
   },
 };
 
@@ -5453,6 +5461,16 @@ export function createToolGatewayService(
           { connectionId: connection.id, credential: grantRef.configPath },
         );
       }
+    }
+    if (template.templateId === "paperclip.gitea-mcp") {
+      const host = giteaConnectionHost(connection);
+      if (!host) {
+        throw new ToolGatewayHttpError(422, "Reconnect Gitea with a valid Gitea host.", "gitea_host_invalid",
+          { connectionId: connection.id });
+      }
+      env.GITEA_HOST = host.origin;
+      // gitea-mcp writes a log file under $HOME; keep it out of the server's home.
+      env.HOME = os.tmpdir();
     }
     if (template.templateId === "paperclip.cognee-cloud") {
       try { cogneeCloudUrl(env.COGNEE_BASE_URL ?? ""); }

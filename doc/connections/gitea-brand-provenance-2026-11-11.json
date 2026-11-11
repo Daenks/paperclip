@@ -1,0 +1,16 @@
+{
+ "retrievedAt": "2026-11-11",
+ "providers": [
+  {
+   "slug": "gitea",
+   "provider": "Gitea",
+   "catalogVisible": true,
+   "localAsset": "/brands/apps/gitea.svg",
+   "sourceUrl": "https://raw.githubusercontent.com/go-gitea/gitea/v1.25.1/public/assets/img/logo.svg",
+   "sourceContext": "https://github.com/go-gitea/gitea (official Gitea repository, public/assets/img/logo.svg at v1.25.1)",
+   "retrievedAt": "2026-11-11",
+   "sha256": "ab8b24d9c8863b8961221e3a64e349d7bc8d7a1f2d10ea5b96049ad1740efdba",
+   "note": "Official Gitea logo; retained without modification. Same artwork serves light and dark frames."
+  }
+ ]
+}
