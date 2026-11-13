@@ -11,7 +11,9 @@
   "branding": {
     "logoUrl": "/brands/apps/gitea.svg"
   },
-  "urlPatterns": [],
+  "urlPatterns": [
+    "https://gitea.com/*"
+  ],
   "docsUrl": "https://gitea.com/gitea/gitea-mcp",
   "methods": [
     {
