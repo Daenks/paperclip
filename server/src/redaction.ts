@@ -5,6 +5,10 @@ const SECRET_FIELD_NAME_PATTERN = String.raw`[A-Za-z0-9_-]*(?:api[-_]?key|access
 const SECRET_FIELD_NAME_START = String.raw`(?<![A-Za-z0-9_-])`;
 
 const SECRET_PAYLOAD_KEY_RE = new RegExp(`^(?:${SECRET_FIELD_NAME_PATTERN})(?:_plain|_ref)?$`, "i");
+// Private-key encodings have suffixes (for example devicePrivateKeyPem or
+// signingPrivateKeyDer) that the general credential-name grammar does not cover.
+const PRIVATE_KEY_PAYLOAD_KEY_RE = /private[-_]?key|pem/i;
+const PRIVATE_KEY_PEM_RE = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/i;
 // Authorization reasons are policy decision codes, not credentials. They must
 // remain visible in audit receipts even though the field name contains
 // "authorization". JWT-shaped values are still caught by the value guard below.
@@ -917,7 +921,7 @@ export function sanitizeRecord(
       continue;
     }
     if (
-      (SECRET_PAYLOAD_KEY_RE.test(key) || AUDIT_COUNT_PAYLOAD_KEYS.has(key)) &&
+      (SECRET_PAYLOAD_KEY_RE.test(key) || PRIVATE_KEY_PAYLOAD_KEY_RE.test(key) || AUDIT_COUNT_PAYLOAD_KEYS.has(key)) &&
       !AUDIT_REASON_PAYLOAD_KEY_RE.test(key) &&
       !isAuditCountField(key, value)
     ) {
@@ -1014,7 +1018,26 @@ export function redactAgentAdapterConfig(
   return { ...(redactEventPayload(rest) ?? {}), env: redactedEnv };
 }
 
+// Exports preserve portable nonsecret configuration, but must never transport
+// private identity material. Reuse the response policy without applying the
+// broader diagnostic redactor to unrelated portable configuration fields.
+export function redactPrivateKeyMaterial(value: unknown): unknown {
+  if (typeof value === "string") return PRIVATE_KEY_PEM_RE.test(value) ? REDACTED_EVENT_VALUE : value;
+  if (Array.isArray(value)) return value.map(redactPrivateKeyMaterial);
+  if (isSecretRefBinding(value) || isUserSecretRefBinding(value)) return sanitizeValue(value);
+  if (!isPlainObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+    key,
+    PRIVATE_KEY_PAYLOAD_KEY_RE.test(key)
+      ? isSecretRefBinding(entry) || isUserSecretRefBinding(entry)
+        ? sanitizeValue(entry)
+        : REDACTED_EVENT_VALUE
+      : redactPrivateKeyMaterial(entry),
+  ]));
+}
+
 export function redactSensitiveText(input: string): string {
+  if (PRIVATE_KEY_PEM_RE.test(input)) return REDACTED_EVENT_VALUE;
   if (!maybeContainsSecretText(input)) return input;
   return redactCommandText(
     redactStandaloneBearerCredentials(redactAuthorizationCredentials(input))
