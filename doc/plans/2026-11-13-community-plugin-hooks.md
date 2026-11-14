@@ -4,7 +4,9 @@ Date: 2026-11-13. Checked against `master` at `e6df84a99`.
 
 ## Why this document
 
-I run Paperclip from source on a self-hosted setup with Gitea and Mattermost. I built both integrations as core changes first. The guidance is that community features should ship as plugins, so I rebuilt what I could as plugins. This document lists what the plugin surface could do, where it stopped, and the hooks I would need to finish the job.
+I run Paperclip from source on a self-hosted setup with Gitea and Mattermost. I built both integrations as core changes first, before I had read the contribution guidance. The guidance is that community features should ship as plugins, so I had my agent rebuild what it could as plugins. This document lists what the plugin surface could do, where it stopped, and the hooks I would need to finish the job.
+
+An AI agent (Claude) wrote the plugins and this document under my direction. Every statement about the plugin surface was checked against the code at the commit above.
 
 The two plugins are on the branch `feat/community-plugins` of `Daenks/paperclip`, under `packages/plugins/plugin-mattermost` and `packages/plugins/plugin-gitea`. Both typecheck, pass the host's manifest schema, and have tests on the SDK test harness (8 each). Neither has been installed on a live instance yet.
 
