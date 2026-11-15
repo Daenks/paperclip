@@ -1376,8 +1376,8 @@ await harness.emit("issue.created", { issueId: "iss_1" }, { entityId: "iss_1", e
 ```
 
 `harness.contributeRunContext(plugin, request?)` calls `onContributeRunContext`
-with the host's capability check and limits. See "Run context contributions" in
-`doc/plugins/PLUGIN_AUTHORING_GUIDE.md`.
+with the host's capability check and limits, applied to the trimmed text. See
+"Run context contributions" in `doc/plugins/PLUGIN_AUTHORING_GUIDE.md`.
 
 ## Bundler presets
 

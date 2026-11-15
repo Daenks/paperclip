@@ -761,9 +761,10 @@ Host limits, per plugin and per run:
 - a title of at most 120 characters, on one line, not blank
 - markdown that is not blank, at most 20,000 characters summed over the sections
 
-Characters are counted as JavaScript string length. A result over a limit, or
-of the wrong shape, is dropped whole and reported in the run log. It is never
-truncated.
+The host trims surrounding whitespace from each title and markdown body, and
+the limits apply to the trimmed text that it delivers. Characters are counted as
+JavaScript string length. A result over a limit, or of the wrong shape, is
+dropped whole and reported in the run log. It is never truncated.
 
 The host calls the plugins in parallel and waits at most 3 seconds for each.
 A timeout, an error, a worker that is not running, or a dropped result does

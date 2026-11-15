@@ -22,6 +22,20 @@ describe("validatePluginRunContextResult", () => {
     if (result.ok) expect(result.sections[1]).toEqual({ title: "Title 1", markdown: "x" });
   });
 
+  it("applies the limits to the trimmed text that the host delivers", () => {
+    const markdown = "m".repeat(PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS - 10);
+    const title = "t".repeat(PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS);
+    const padded = validatePluginRunContextResult({ sections: [
+      { title: ` ${title}`, markdown: `${markdown}${" ".repeat(20)}` },
+      { title: "Second", markdown: `\n  ${"n".repeat(10)}  \n` },
+    ] });
+    expect(padded).toEqual({ ok: true, sections: [{ title, markdown }, { title: "Second", markdown: "n".repeat(10) }] });
+    expect(validatePluginRunContextResult({ sections: [{ title: ` ${title}x `, markdown: "M" }] }))
+      .toEqual({ ok: false, message: `Section 1 has a ${PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS + 1}-character title; the limit is ${PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS}.` });
+    expect(validatePluginRunContextResult({ sections: [{ title: "T", markdown: `  ${"m".repeat(PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS + 1)}  ` }] }))
+      .toEqual({ ok: false, message: `${PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS + 1} characters of markdown were returned; the limit is ${PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS}.` });
+  });
+
   it.each([
     ["a non-object result", null],
     ["an array result", []],

@@ -146,8 +146,9 @@ export interface TestHarness {
   executeTool<T = ToolResult>(name: string, params: unknown, runCtx?: Partial<ToolRunContext>): Promise<T>;
   /**
    * Call `plugin.definition.onContributeRunContext` as the host does. Requires
-   * `agent.run.context.contribute` and applies the host's limits; throws the
-   * host's reason when the host would drop the result. Run `setup(harness.ctx)` first.
+   * `agent.run.context.contribute` and applies the host's limits to the trimmed
+   * title and markdown; returns the trimmed sections, and throws the host's reason
+   * when the host would drop the result. Run `setup(harness.ctx)` first.
    */
   contributeRunContext(plugin: PaperclipPlugin, request?: Partial<PluginRunContextRequest>): Promise<PluginRunContextResult>;
   /** Read raw in-memory state for assertions. */
