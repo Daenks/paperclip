@@ -9,6 +9,10 @@ export const POLICY_STATE_KEY = "policy";
 export const POLICY_DATA_KEY = "policy";
 /** `ctx.actions` key the settings page saves through. */
 export const SAVE_POLICY_ACTION_KEY = "save-policy";
+/** Activity log entity type of a policy save; the entity id is the company id. */
+export const POLICY_ACTIVITY_ENTITY_TYPE = "company_policies";
+/** Activity log `metadata.type` of a policy save. */
+export const POLICY_ACTIVITY_TYPE = "plugin.company_policies.policy_updated";
 /** Title of the run context section agents receive. */
 export const POLICY_SECTION_TITLE = "Company policies";
 
@@ -33,8 +37,9 @@ export const EMPTY_POLICY: CompanyPolicy = Object.freeze({
 });
 
 /**
- * Characters the agents receive: the host trims the markdown and counts its
- * JavaScript string length, so the limit applies to the trimmed text.
+ * Characters the agents receive: the host applies its markdown limit to the
+ * trimmed text (JavaScript string length) and delivers the trimmed text. The
+ * plugin counts and contributes the trimmed text the same way.
  */
 export function policyCharacterCount(markdown: string): number {
   return markdown.trim().length;
@@ -55,5 +60,7 @@ export function readStoredPolicy(value: unknown): CompanyPolicy {
 
 /** What the settings page reads: the policy plus the limit it is saved against. */
 export interface CompanyPolicyView extends CompanyPolicy {
+  /** Company the policy belongs to, so the page can ignore another company's reply. */
+  companyId: string;
   maxCharacters: number;
 }

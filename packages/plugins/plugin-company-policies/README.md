@@ -27,8 +27,8 @@ The surface is:
 - `onContributeRunContext`, which returns the one section or nothing
 
 Capabilities: `agent.run.context.contribute`, `plugin.state.read`,
-`plugin.state.write`, `instance.settings.register` (required by the
-`companySettingsPage` slot). The plugin registers no agent tools, API routes,
+`plugin.state.write`, `activity.log.write`, `instance.settings.register`
+(required by the `companySettingsPage` slot). The plugin registers no agent tools, API routes,
 jobs or event subscriptions.
 
 ### Who can change the policy
@@ -39,8 +39,22 @@ company access (active, non-viewer membership for board users) before the call
 reaches the worker. That route also accepts an agent API key for the agent's own
 company, so the worker refuses every actor that is not a board user. A save must
 name the revision it edits, so a save over someone else's newer save is refused.
+The worker runs one company's saves one at a time, so two saves of the same
+revision cannot both succeed. That ordering holds within one server process; a
+deployment with several servers sharing one database would need a
+compare-and-set on plugin state in the host.
 A save over the character limit is refused with the counts in the message; the
 host would otherwise drop the whole contribution from every run.
+
+### Activity log
+
+Each successful save writes a company activity entry "Updated company
+policies" (entity type `company_policies`, entity id = the company id) with
+the revision, the switch state, the character count and the saving user's id
+in its metadata. The policy text is never logged. The host attributes the entry
+to the plugin (`actor_type = plugin`); the board user is only in the metadata.
+A refused save writes no entry. If the entry cannot be written, the save still
+stands and the worker logs a warning.
 
 ### Seeing what an agent received
 
@@ -59,5 +73,6 @@ pnpm --filter @paperclipai/plugin-company-policies build
 ```
 
 The tests run on the SDK test harness and cover save and load, company
-isolation, board-only saves, the over-limit refusal, stale-revision refusal, the
-switch, an empty policy, and the shape of the run-context contribution.
+isolation, board-only saves, the over-limit refusal, stale-revision refusal,
+concurrent saves, the activity entry, the switch, an empty policy, and the shape
+of the run-context contribution.

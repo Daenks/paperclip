@@ -16,6 +16,7 @@ const manifest: PaperclipPluginManifestV1 = {
     "agent.run.context.contribute",
     "plugin.state.read",
     "plugin.state.write",
+    "activity.log.write",
     "instance.settings.register",
   ],
   entrypoints: {
