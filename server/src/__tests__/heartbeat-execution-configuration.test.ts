@@ -883,6 +883,30 @@ describePostgres("heartbeat execution configuration through adapter dispatch", (
     }
   });
 
+  it("delivers plugin run context for a run woken through an instance built without a worker manager", async () => {
+    const f = await seed();
+    const pluginId = randomUUID(), pluginKey = `test.run-context.${pluginId}`;
+    await db.insert(plugins).values({ id: pluginId, pluginKey, packageName: "@test/run-context", version: "1.0.0", apiVersion: 1,
+      categories: ["automation"], status: "ready", manifestJson: { id: pluginKey, apiVersion: 1, version: "1.0.0",
+        displayName: "Company Policies", description: "Run context fixture", author: "Paperclip", categories: ["automation"],
+        capabilities: ["agent.run.context.contribute"], entrypoints: { worker: "worker.js" } } });
+    const call = vi.fn(async (_pluginId: string, _method: string, _params: { runId: string }) =>
+      ({ sections: [{ title: "Company policies", markdown: "Registered manager policy." }] }));
+    const workers = { isRunning: (id: string) => id === pluginId, call,
+      getWorker: (id: string) => (id === pluginId ? { supportedMethods: ["contributeRunContext"] } : undefined) } as unknown as PluginWorkerManager;
+    // The process's scheduler instance owns the manager; routes such as secrets or
+    // status cards construct heartbeatService(db) without one and still execute runs.
+    heartbeatService(db, { pluginWorkerManager: workers });
+    try {
+      const { finished, input } = await execute(f);
+      expect(call.mock.calls.filter(([, , params]) => params.runId === finished.id)).toHaveLength(1);
+      expect(renderPaperclipWakePrompt(input?.context.paperclipWake)).toContain("Registered manager policy.");
+    } finally {
+      await heartbeat.drainActiveRunExecutions();
+      await db.update(plugins).set({ status: "disabled" }).where(eq(plugins.id, pluginId));
+    }
+  });
+
   it("cleans acquired credentials and redacts diagnostics when later skill preparation fails", async () => {
     vi.stubEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.test");
     const f = await seed(true);

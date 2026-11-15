@@ -575,6 +575,7 @@ import { resolveAndRetainRunTrustPreset } from "./run-trust-preset.js";
 
 import { effectiveProjectWorkspacePolicy, sourcelessProjectWorkspacePolicy } from "./project-workspace-provider.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
+import { registerPluginRunContextWorkers } from "./plugin-run-context.js";
 
 import { computeTaskDrain, applyTaskDrain, startTaskDrain, stopTaskDrain, readTaskDrain, subscribeTaskDrainChanges,
   subscribeTaskDrainExpiry } from "./task-admission.js";
@@ -886,6 +887,7 @@ export function heartbeatService(
   db: Db,
   options: HeartbeatServiceOptions = {},
 ) {
+  if (options.pluginWorkerManager) registerPluginRunContextWorkers(db, options.pluginWorkerManager);
   const { finalizeAgentStatus } = createHeartbeatAgentStatus(db);
   const {
     getAgent,

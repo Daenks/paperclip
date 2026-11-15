@@ -30,6 +30,14 @@ export interface PluginRunContextOutcome {
 type RunEvent = { eventType: string; stream: "system"; level: "info" | "warn"; message: string; payload: Record<string, unknown> };
 
 const byKey = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+// Routes and services also build heartbeatService(db) without a worker manager,
+// and those instances execute runs (wakeup and cancelRun start queued runs
+// in-process). The process has one manager; resolve it so their runs still ask plugins.
+const registeredWorkers = new WeakMap<Db, PluginRunContextWorkers>();
+export function registerPluginRunContextWorkers(db: Db, workers: PluginRunContextWorkers): void {
+  registeredWorkers.set(db, workers);
+}
 const oneLine = (value: string) => value.replace(/\s+/g, " ").trim();
 
 /** Ready plugins with the capability that the company has not disabled. */
@@ -107,7 +115,7 @@ export async function resolvePluginRunContext(
   try {
     const candidates = await listRunContextPlugins(db, request.companyId);
     if (!candidates.length) return { snapshot: null, contributions: [], skipped: [] };
-    const { contributions, skipped } = await collectPluginRunContext(workers, candidates, request);
+    const { contributions, skipped } = await collectPluginRunContext(workers ?? registeredWorkers.get(db), candidates, request);
     return { snapshot: composePluginRunContext(contributions), contributions, skipped };
   } catch (error) {
     logger.warn({ err: error, runId: request.runId }, "Plugin run context could not be prepared; the run continues without it");

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { companies, createDb, pluginCompanySettings, plugins } from "@paperclipai/db";
 import { JsonRpcCallError, PLUGIN_RPC_ERROR_CODES } from "@paperclipai/plugin-sdk";
@@ -12,6 +13,7 @@ import {
   composePluginRunContext,
   listRunContextPlugins,
   preparePluginRunContextDelivery,
+  registerPluginRunContextWorkers,
   resolvePluginRunContext,
   type PluginRunContextPlugin,
   type PluginRunContextWorkers,
@@ -246,6 +248,24 @@ describe("preparePluginRunContextDelivery", () => {
     expect(await keys(company!.id)).toEqual(["acme.explicit", "acme.ready"]);
     expect(await keys(other!.id)).toEqual(["acme.disabled-here", "acme.explicit", "acme.ready"]);
     expect((await listRunContextPlugins(db, company!.id)).find(p => p.id === ready)).toEqual({ id: ready, pluginKey: "acme.ready", displayName: "Display acme.ready" });
+  });
+
+  it("falls back to the worker manager registered for the database, and prefers an explicit one", async () => {
+    await db.update(plugins).set({ status: "disabled" });
+    const [company] = await db.insert(companies).values({ name: "Registered", issuePrefix: `RR${randomUUID().slice(0, 4).toUpperCase()}` }).returning();
+    const id = await insertPlugin(`acme.registered-${randomUUID().slice(0, 6)}`, "ready", ["agent.run.context.contribute"]);
+    const answer = (markdown: string) => async () => ({ sections: [{ title: "Policy", markdown }] });
+    const registered = fakeWorkers({ [id]: answer("registered") });
+    const explicit = fakeWorkers({ [id]: answer("explicit") });
+    registerPluginRunContextWorkers(db, registered.workers);
+    try {
+      const companyRequest = { ...request, companyId: company!.id };
+      expect((await resolvePluginRunContext(db, undefined, companyRequest)).snapshot?.text).toContain("registered");
+      expect((await resolvePluginRunContext(db, explicit.workers, companyRequest)).snapshot?.text).toContain("explicit");
+      expect(registered.call).toHaveBeenCalledTimes(1);
+    } finally {
+      await db.update(plugins).set({ status: "disabled" }).where(eq(plugins.id, id));
+    }
   });
 
   it("makes no plugin call when nothing qualifies", async () => {
