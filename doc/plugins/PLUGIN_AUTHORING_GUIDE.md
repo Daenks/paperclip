@@ -235,6 +235,8 @@ request's `companyId`.
 
 The host enforces the limits: at most 8 sections, titles of at most 120
 characters on one line, and at most 20,000 characters of markdown in total.
+The host trims surrounding whitespace from titles and markdown first, and counts
+the trimmed text.
 The SDK exports them as `PLUGIN_RUN_CONTEXT_MAX_SECTIONS`,
 `PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS`, and `PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS`.
 A result over a limit is dropped whole, so check lengths when you save content,

@@ -60,6 +60,16 @@ describe("createTestHarness run context contributions", () => {
     );
   });
 
+  it("counts the trimmed text against the limits, as the host does", async () => {
+    const title = "t".repeat(120), markdown = "m".repeat(19_990);
+    const plugin = definePlugin({
+      async setup() {},
+      async onContributeRunContext() { return { sections: [{ title: ` ${title}`, markdown: `${markdown}${" ".repeat(20)}` }] }; },
+    });
+    const harness = createTestHarness({ manifest });
+    await expect(harness.contributeRunContext(plugin)).resolves.toEqual({ sections: [{ title, markdown }] });
+  });
+
   it("requires the capability and the handler", async () => {
     const plugin = definePlugin({ async setup() {}, async onContributeRunContext() { return {}; } });
     await expect(createTestHarness({ manifest, capabilities: [] }).contributeRunContext(plugin))

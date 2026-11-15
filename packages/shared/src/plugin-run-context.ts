@@ -8,9 +8,9 @@
 
 /** Most sections one plugin may contribute to a run. */
 export const PLUGIN_RUN_CONTEXT_MAX_SECTIONS = 8;
-/** Longest section title, in characters (JavaScript string length). */
+/** Longest section title, in characters (JavaScript string length) after trimming. */
 export const PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS = 120;
-/** Most markdown one plugin may contribute to a run, summed over its sections, in characters. */
+/** Most markdown one plugin may contribute to a run, in characters after trimming, summed over its sections. */
 export const PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS = 20_000;
 /** Time the host waits for each plugin before continuing without it. */
 export const PLUGIN_RUN_CONTEXT_TIMEOUT_MS = 3_000;
@@ -65,15 +65,18 @@ export function validatePluginRunContextResult(value: unknown): PluginRunContext
     if (!section || typeof section !== "object" || Array.isArray(section)) {
       return { ok: false, message: `Section ${index + 1} is not an object.` };
     }
-    const { title, markdown } = section as { title?: unknown; markdown?: unknown };
-    if (typeof title !== "string" || !title.trim()) return { ok: false, message: `Section ${index + 1} has no title.` };
-    if (/[\r\n]/.test(title.trim())) return { ok: false, message: `Section ${index + 1} has a title longer than one line.` };
+    const { title: rawTitle, markdown: rawMarkdown } = section as { title?: unknown; markdown?: unknown };
+    // Limits apply to the trimmed text, which is what the host delivers.
+    const title = typeof rawTitle === "string" ? rawTitle.trim() : "";
+    if (!title) return { ok: false, message: `Section ${index + 1} has no title.` };
+    if (/[\r\n]/.test(title)) return { ok: false, message: `Section ${index + 1} has a title longer than one line.` };
     if (title.length > PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS) {
       return { ok: false, message: `Section ${index + 1} has a ${title.length}-character title; the limit is ${PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS}.` };
     }
-    if (typeof markdown !== "string" || !markdown.trim()) return { ok: false, message: `Section ${index + 1} has no markdown.` };
+    const markdown = typeof rawMarkdown === "string" ? rawMarkdown.trim() : "";
+    if (!markdown) return { ok: false, message: `Section ${index + 1} has no markdown.` };
     markdownChars += markdown.length;
-    accepted.push({ title: title.trim(), markdown: markdown.trim() });
+    accepted.push({ title, markdown });
   }
   if (markdownChars > PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS) {
     return { ok: false, message: `${markdownChars} characters of markdown were returned; the limit is ${PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS}.` };
