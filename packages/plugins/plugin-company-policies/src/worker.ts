@@ -6,6 +6,8 @@ import {
   type PluginPerformActionContext,
 } from "@paperclipai/plugin-sdk";
 import {
+  POLICY_ACTIVITY_ENTITY_TYPE,
+  POLICY_ACTIVITY_TYPE,
   POLICY_DATA_KEY,
   POLICY_SECTION_TITLE,
   POLICY_STATE_KEY,
@@ -44,14 +46,58 @@ function authorizeSave(context: PluginPerformActionContext): { companyId: string
 
 let activeContext: PluginContext | null = null;
 
+// Tail of the pending saves per company. This orders saves within this worker
+// process only; several servers sharing one database would need a host-side
+// compare-and-set on plugin state.
+const saveQueues = new Map<string, Promise<unknown>>();
+
+async function serializeForCompany<T>(companyId: string, work: () => Promise<T>): Promise<T> {
+  const previous = saveQueues.get(companyId) ?? Promise.resolve();
+  const run = previous.then(work, work);
+  const tail = run.catch(() => undefined);
+  saveQueues.set(companyId, tail);
+  try {
+    return await run;
+  } finally {
+    if (saveQueues.get(companyId) === tail) saveQueues.delete(companyId);
+  }
+}
+
+/** Records the save in the company's activity log. The policy text is never logged. */
+async function logPolicySaved(ctx: PluginContext, companyId: string, policy: CompanyPolicy): Promise<void> {
+  try {
+    await ctx.activity.log({
+      companyId,
+      message: "Updated company policies",
+      entityType: POLICY_ACTIVITY_ENTITY_TYPE,
+      entityId: companyId,
+      metadata: {
+        type: POLICY_ACTIVITY_TYPE,
+        revision: policy.revision,
+        enabled: policy.enabled,
+        characterCount: policyCharacterCount(policy.markdown),
+        userId: policy.updatedBy,
+      },
+    });
+  } catch (error) {
+    // The policy is already saved; failing the save now would make the next save stale.
+    ctx.logger.warn("Company policies were saved but the activity entry could not be written", {
+      companyId,
+      revision: policy.revision,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 const plugin = definePlugin({
   async setup(ctx) {
     activeContext = ctx;
 
     // Reads go through the host's board-only data route; the host injects the authorized company.
     ctx.data.register(POLICY_DATA_KEY, async (params): Promise<CompanyPolicyView> => {
-      const policy = await loadPolicy(ctx, requireCompanyId(params.companyId));
-      return { ...policy, maxCharacters: PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS };
+      const companyId = requireCompanyId(params.companyId);
+      const policy = await loadPolicy(ctx, companyId);
+      return { ...policy, companyId, maxCharacters: PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS };
     });
 
     ctx.actions.register(SAVE_POLICY_ACTION_KEY, async (params, context): Promise<CompanyPolicyView> => {
@@ -67,19 +113,25 @@ const plugin = definePlugin({
           `The policy is ${characters.toLocaleString("en-US")} characters; the limit is ${PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS.toLocaleString("en-US")}. Shorten it and save again.`,
         );
       }
-      const current = await loadPolicy(ctx, companyId);
-      if (params.baseRevision !== current.revision) {
-        throw new Error("Someone else saved these policies after you opened them. Reload the page to see their version, then make your change again.");
-      }
-      const next: CompanyPolicy = {
-        markdown: params.markdown,
-        enabled: params.enabled,
-        updatedAt: new Date().toISOString(),
-        updatedBy: userId,
-        revision: current.revision + 1,
-      };
-      await ctx.state.set(policyScope(companyId), next);
-      return { ...next, maxCharacters: PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS };
+      // The revision check and the write must not interleave with another save
+      // for the same company, or one of two concurrent saves is lost silently.
+      const next = await serializeForCompany(companyId, async () => {
+        const current = await loadPolicy(ctx, companyId);
+        if (params.baseRevision !== current.revision) {
+          throw new Error("Someone else saved these policies after you opened them. Reload the page to see their version, then make your change again.");
+        }
+        const saved: CompanyPolicy = {
+          markdown: params.markdown as string,
+          enabled: params.enabled as boolean,
+          updatedAt: new Date().toISOString(),
+          updatedBy: userId,
+          revision: current.revision + 1,
+        };
+        await ctx.state.set(policyScope(companyId), saved);
+        return saved;
+      });
+      await logPolicySaved(ctx, companyId, next);
+      return { ...next, companyId, maxCharacters: PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS };
     });
   },
 

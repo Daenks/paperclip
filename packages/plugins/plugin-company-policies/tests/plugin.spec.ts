@@ -4,6 +4,8 @@ import { createTestHarness } from "@paperclipai/plugin-sdk/testing";
 import { pluginManifestV1Schema } from "@paperclipai/shared";
 import manifest, { PLUGIN_ID, SETTINGS_PAGE_ROUTE_PATH } from "../src/manifest.js";
 import {
+  POLICY_ACTIVITY_ENTITY_TYPE,
+  POLICY_ACTIVITY_TYPE,
   POLICY_DATA_KEY,
   POLICY_SECTION_TITLE,
   POLICY_STATE_KEY,
@@ -45,6 +47,7 @@ describe("company policies plugin", () => {
   it("declares a valid manifest with only the capabilities it uses", () => {
     expect(pluginManifestV1Schema.parse(manifest)).toMatchObject({ id: PLUGIN_ID, displayName: "Company Policies" });
     expect([...manifest.capabilities].sort()).toEqual([
+      "activity.log.write",
       "agent.run.context.contribute",
       "instance.settings.register",
       "plugin.state.read",
@@ -69,6 +72,7 @@ describe("company policies plugin", () => {
       updatedAt: null,
       updatedBy: null,
       revision: 0,
+      companyId: COMPANY_ID,
       maxCharacters: PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS,
     });
   });
@@ -76,7 +80,7 @@ describe("company policies plugin", () => {
   it("saves and loads a policy in company-scoped state", async () => {
     const harness = await setup();
     const saved = await save(harness, COMPANY_ID, { markdown: "Be kind." });
-    expect(saved).toMatchObject({ markdown: "Be kind.", enabled: true, updatedBy: "user-1", revision: 1 });
+    expect(saved).toMatchObject({ markdown: "Be kind.", enabled: true, updatedBy: "user-1", revision: 1, companyId: COMPANY_ID });
     expect(Date.parse(saved.updatedAt!)).not.toBeNaN();
     await expect(load(harness, COMPANY_ID)).resolves.toEqual(saved);
     expect(harness.getState({ scopeKind: "company", scopeId: COMPANY_ID, stateKey: POLICY_STATE_KEY }))
@@ -96,7 +100,9 @@ describe("company policies plugin", () => {
     });
   });
 
-  it("writes to the host-authorized company, not a company named in the params", async () => {
+  // The harness, like the host bridge, replaces params.companyId with the authorized company,
+  // so this shows the end-to-end behavior rather than which value the worker reads.
+  it("saves to the company the host authorized when the params name another company", async () => {
     const harness = await setup();
     await harness.performAction(
       SAVE_POLICY_ACTION_KEY,
@@ -179,6 +185,80 @@ describe("company policies plugin", () => {
     await expect(harness.contributeRunContext(plugin, { companyId: COMPANY_ID })).resolves.toEqual({ sections: [] });
     await save(harness, COMPANY_ID, { markdown: " \n\t\n" });
     await expect(harness.contributeRunContext(plugin, { companyId: COMPANY_ID })).resolves.toEqual({ sections: [] });
+  });
+
+  it("serializes concurrent saves for a company so one is refused as stale instead of lost", async () => {
+    const harness = await setup();
+    // Slow writes: without serialization both saves read revision 0 before either write lands.
+    const realSet = harness.ctx.state.set.bind(harness.ctx.state);
+    harness.ctx.state.set = async (input, value) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return realSet(input, value);
+    };
+    const results = await Promise.allSettled([
+      save(harness, COMPANY_ID, { markdown: "Edit A." }),
+      save(harness, COMPANY_ID, { markdown: "Edit B." }),
+    ]);
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(String(rejected[0]!.reason)).toContain("Someone else saved these policies");
+    const winner = (fulfilled[0] as PromiseFulfilledResult<CompanyPolicyView>).value;
+    expect(winner.revision).toBe(1);
+    await expect(load(harness, COMPANY_ID)).resolves.toMatchObject({ markdown: winner.markdown, revision: 1 });
+  });
+
+  it("does not hold one company's save behind another company's", async () => {
+    const harness = await setup();
+    const [a, b] = await Promise.all([
+      save(harness, COMPANY_ID, { markdown: "A." }),
+      save(harness, OTHER_COMPANY_ID, { markdown: "B." }),
+    ]);
+    expect(a).toMatchObject({ companyId: COMPANY_ID, revision: 1 });
+    expect(b).toMatchObject({ companyId: OTHER_COMPANY_ID, revision: 1 });
+  });
+
+  it("records each save in the company's activity log without the policy text", async () => {
+    const harness = await setup();
+    await save(harness, COMPANY_ID, { markdown: "  Secret-ish internal rule.  ", enabled: false });
+    expect(harness.activity).toEqual([
+      {
+        companyId: COMPANY_ID,
+        message: "Updated company policies",
+        entityType: POLICY_ACTIVITY_ENTITY_TYPE,
+        entityId: COMPANY_ID,
+        metadata: {
+          type: POLICY_ACTIVITY_TYPE,
+          revision: 1,
+          enabled: false,
+          characterCount: "Secret-ish internal rule.".length,
+          userId: "user-1",
+        },
+      },
+    ]);
+    expect(JSON.stringify(harness.activity)).not.toContain("Secret-ish");
+  });
+
+  it("records no activity for a refused save", async () => {
+    const harness = await setup();
+    await expect(save(harness, COMPANY_ID, { markdown: "x" }, { type: "agent", agentId: "agent-1" })).rejects.toThrow();
+    await expect(save(harness, COMPANY_ID, { markdown: "x".repeat(PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS + 1) })).rejects.toThrow();
+    await expect(save(harness, COMPANY_ID, { markdown: "x", baseRevision: 5 })).rejects.toThrow();
+    expect(harness.activity).toEqual([]);
+  });
+
+  it("keeps a save when the activity entry cannot be written", async () => {
+    const harness = await setup();
+    harness.ctx.activity.log = async () => {
+      throw new Error("activity store down");
+    };
+    await expect(save(harness, COMPANY_ID, { markdown: "Kept." })).resolves.toMatchObject({ revision: 1 });
+    await expect(load(harness, COMPANY_ID)).resolves.toMatchObject({ markdown: "Kept.", revision: 1 });
+    expect(harness.logs).toContainEqual(expect.objectContaining({
+      level: "warn",
+      message: "Company policies were saved but the activity entry could not be written",
+    }));
   });
 
   it("reports no background work to the idle-sleep handshake", async () => {
