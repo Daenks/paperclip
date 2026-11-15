@@ -22,6 +22,7 @@ import type { companySkillService } from "../company-skills.js";
 import { connectionIntentService } from "../connection-intents.js";
 import { PLUGIN_RUNNER_AI_CONNECTION_REQUIRED, pluginEnvironmentRunnerTaskDriver, pluginRunnerAiConnectionRequiredMessage } from "../plugin-runner-ai-connection.js";
 import { prepareConnectionInstructionDelivery } from "../connection-instructions.js";
+import { preparePluginRunContextDelivery, resolvePluginRunContext, type PluginRunContextWorkers } from "../plugin-run-context.js";
 import { applyConnectorSkills, prepareConnectorSkillDelivery, resolveConnectorAssignments } from "../connector-runtime.js";
 import { resolveManagedGitHubIdentitySelection } from "../git-credentials.js";
 import { resolveAssignedConnectionInstructionsForRun, resolveMcpConnectionSkillsForRun } from "../native-runtime/assigned-mcp-tools.js";
@@ -89,6 +90,7 @@ export interface HeartbeatExecutionConfigurationInput {
     companySkills: Pick<ReturnType<typeof companySkillService>, "withRuntimeSkillEntries">;
     appendRunEvent: ReturnType<typeof createHeartbeatLifecycle>["appendRunEvent"];
     finalizeAiConnectionBusyDeferral: ReturnType<typeof createHeartbeatRetries>["finalizeAiConnectionBusyDeferral"];
+    pluginWorkerManager?: PluginRunContextWorkers;
   };
   // The executor must observe these before a later preparation step can throw.
   onFailureSecretsResolved: (readSecrets: () => string[]) => void;
@@ -400,6 +402,9 @@ export async function prepareHeartbeatExecutionConfiguration(db: Db, input: Hear
         return null;
       })
     : Promise.resolve(null);
+  // Plugin context is fail-open: a plugin that does not answer is skipped with a warning.
+  const pluginRunContextPreparation = resolvePluginRunContext(db, input.services.pluginWorkerManager,
+    { companyId: agent.companyId, agentId: agent.id, runId: run.id, issueId, adapterType: agent.adapterType });
   // Approved skills from connected apps load beside company skills. A skill
   // that cannot load now is left out with a warning; it never fails the run.
   const mcpSkillsPreparation = preconfiguredHome ? Promise.resolve(null)
@@ -453,6 +458,7 @@ export async function prepareHeartbeatExecutionConfiguration(db: Db, input: Hear
     resolve: async () => preparedInstructions.value,
     context, config: connectorDelivery.config, native: agent.adapterType === "paperclip_runner",
   });
+  await preparePluginRunContextDelivery({ outcome: await pluginRunContextPreparation, context, appendRunEvent: (event) => appendRunEvent(run, event) });
   const agentIdentity = supportsManagedAgentIdentity(agent.adapterType, agent.adapterConfig, run.runtimeMode === "native" ? run.driverKind : undefined)
     ? await time("configuration_agent_identity", () => agentIdentityService(db).ensureAgentIdentity(agent.companyId, agent.id))
     : undefined;

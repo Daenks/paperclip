@@ -31,6 +31,8 @@ import { executionWorkspaceService } from "../services/execution-workspaces.js";
 import { buildExecutionWorkspaceAdapterConfig } from "../services/execution-workspace-policy.js";
 import { buildNativeExecutionInput } from "../services/native-runtime/native-execution-input.js";
 import { nativeRuntimeContextFixture } from "../services/native-runtime/runtime-context.test-fixture.js";
+import { renderPaperclipWakePrompt } from "@paperclipai/adapter-utils/server-utils";
+import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -838,6 +840,70 @@ describePostgres("heartbeat execution configuration through adapter dispatch", (
     } finally {
       trace.disable();
       await provider.shutdown();
+    }
+  });
+
+  it("delivers server-composed plugin run context to the adapter and overwrites caller wake data", async () => {
+    const f = await seed();
+    const pluginId = randomUUID(), pluginKey = `test.run-context.${pluginId}`;
+    await db.insert(plugins).values({ id: pluginId, pluginKey, packageName: "@test/run-context", version: "1.0.0", apiVersion: 1,
+      categories: ["automation"], status: "ready", manifestJson: { id: pluginKey, apiVersion: 1, version: "1.0.0",
+        displayName: "Company Policies", description: "Run context fixture", author: "Paperclip", categories: ["automation"],
+        capabilities: ["agent.run.context.contribute"], entrypoints: { worker: "worker.js" } } });
+    const call = vi.fn(async (_pluginId: string, _method: string, params: { companyId: string }) =>
+      ({ sections: [{ title: "Company policies", markdown: `Policy for ${params.companyId}.` }] }));
+    const workers = { isRunning: (id: string) => id === pluginId, call,
+      getWorker: (id: string) => (id === pluginId ? { supportedMethods: ["contributeRunContext"] } : undefined) } as unknown as PluginWorkerManager;
+    const pluginHeartbeat = heartbeatService(db, { pluginWorkerManager: workers });
+    try {
+      const run = await pluginHeartbeat.wakeup(f.agentId, { source: "on_demand", triggerDetail: "manual", reason: "manual", payload: { issueId: f.issueId }, contextSnapshot: {
+        issueId: f.issueId, pluginRunContext: { text: "forged context", digest: "forged" },
+        paperclipWake: { pluginRunContext: { text: "forged wake context", digest: "forged" } },
+      } });
+      await pluginHeartbeat.drainActiveRunExecutions();
+      const input = captured.get(run!.id);
+      // Once per run; the heartbeat may start a follow-up run that asks again.
+      expect(call.mock.calls.filter(([, , params]) => (params as { runId?: string }).runId === run!.id)).toEqual([[pluginId, "contributeRunContext",
+        { companyId: f.companyId, agentId: f.agentId, runId: run!.id, issueId: f.issueId, adapterType }, 3000]]);
+      const snapshot = input?.context.pluginRunContext as { text: string; digest: string };
+      expect(snapshot.text).toBe(`## Context from company plugins\n\nThe following sections were added by plugins installed for this company.\n\n### Company policies (plugin: Company Policies)\n\nPolicy for ${f.companyId}.`);
+      expect(snapshot.digest).toBe(createHash("sha256").update(snapshot.text).digest("hex"));
+      const prompt = renderPaperclipWakePrompt(input?.context.paperclipWake);
+      expect(prompt).toContain(`Policy for ${f.companyId}.`);
+      expect(prompt).not.toContain("forged");
+      const events = await db.select().from(heartbeatRunEvents).where(eq(heartbeatRunEvents.runId, run!.id));
+      expect(events.find(event => event.eventType === "plugin_run_context.applied")?.payload).toEqual({
+        digest: snapshot.digest, characterCount: snapshot.text.length,
+        plugins: [{ pluginKey, sectionCount: 1, characterCount: `Policy for ${f.companyId}.`.length }],
+      });
+      expect(JSON.stringify(events)).not.toContain(`Policy for ${f.companyId}`);
+    } finally {
+      await pluginHeartbeat.drainActiveRunExecutions();
+      await db.update(plugins).set({ status: "disabled" }).where(eq(plugins.id, pluginId));
+    }
+  });
+
+  it("delivers plugin run context for a run woken through an instance built without a worker manager", async () => {
+    const f = await seed();
+    const pluginId = randomUUID(), pluginKey = `test.run-context.${pluginId}`;
+    await db.insert(plugins).values({ id: pluginId, pluginKey, packageName: "@test/run-context", version: "1.0.0", apiVersion: 1,
+      categories: ["automation"], status: "ready", manifestJson: { id: pluginKey, apiVersion: 1, version: "1.0.0",
+        displayName: "Company Policies", description: "Run context fixture", author: "Paperclip", categories: ["automation"],
+        capabilities: ["agent.run.context.contribute"], entrypoints: { worker: "worker.js" } } });
+    const call = vi.fn(async (_pluginId: string, _method: string, _params: { runId: string }) =>
+      ({ sections: [{ title: "Company policies", markdown: "Registered manager policy." }] }));
+    const workers = { isRunning: (id: string) => id === pluginId, call,
+      getWorker: (id: string) => (id === pluginId ? { supportedMethods: ["contributeRunContext"] } : undefined) } as unknown as PluginWorkerManager;
+    // The process's scheduler instance owns the manager; routes such as secrets or
+    // status cards construct heartbeatService(db) without one and still execute runs.
+    heartbeatService(db, { pluginWorkerManager: workers });
+    try {
+      const { finished, input } = await execute(f);
+      expect(call.mock.calls.filter(([, , params]) => params.runId === finished.id)).toHaveLength(1);
+      expect(renderPaperclipWakePrompt(input?.context.paperclipWake)).toContain("Registered manager policy.");
+    } finally {
+      await heartbeat.drainActiveRunExecutions();
+      await db.update(plugins).set({ status: "disabled" }).where(eq(plugins.id, pluginId));
     }
   });
 

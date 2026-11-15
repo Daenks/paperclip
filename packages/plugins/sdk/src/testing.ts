@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { createIssueThreadInteractionSchema, pluginOperationIssueOriginKind } from "@paperclipai/shared";
+import { createIssueThreadInteractionSchema, pluginOperationIssueOriginKind, validatePluginRunContextResult } from "@paperclipai/shared";
+import type { PluginRunContextRequest, PluginRunContextResult } from "@paperclipai/shared";
+import type { PaperclipPlugin } from "./define-plugin.js";
 import type {
   PaperclipPluginManifestV1,
   PluginCapability,
@@ -142,6 +144,12 @@ export interface TestHarness {
   ): Promise<T>;
   /** Execute a registered tool handler via `ctx.tools.execute(...)`. */
   executeTool<T = ToolResult>(name: string, params: unknown, runCtx?: Partial<ToolRunContext>): Promise<T>;
+  /**
+   * Call `plugin.definition.onContributeRunContext` as the host does. Requires
+   * `agent.run.context.contribute` and applies the host's limits; throws the
+   * host's reason when the host would drop the result. Run `setup(harness.ctx)` first.
+   */
+  contributeRunContext(plugin: PaperclipPlugin, request?: Partial<PluginRunContextRequest>): Promise<PluginRunContextResult>;
   /** Read raw in-memory state for assertions. */
   getState(input: ScopeKey): unknown;
   /** Simulate a streaming event arriving for an active session. */
@@ -2721,6 +2729,21 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         projectId: runCtx.projectId ?? "project-test",
       };
       return await handler(params, ctxToPass) as T;
+    },
+    async contributeRunContext(plugin, request = {}) {
+      requireCapability(manifest, capabilitySet, "agent.run.context.contribute");
+      const handler = plugin.definition.onContributeRunContext;
+      if (!handler) throw new Error(`Plugin '${manifest.id}' does not implement onContributeRunContext`);
+      const result = await handler.call(plugin.definition, {
+        companyId: request.companyId ?? "company-test",
+        agentId: request.agentId ?? "agent-test",
+        runId: request.runId ?? randomUUID(),
+        issueId: request.issueId ?? null,
+        adapterType: request.adapterType ?? "process",
+      });
+      const validation = validatePluginRunContextResult(result);
+      if (!validation.ok) throw new Error(`The host would drop this run context contribution: ${validation.message}`);
+      return { sections: validation.sections };
     },
     getState(input) {
       return state.get(stateMapKey(input));

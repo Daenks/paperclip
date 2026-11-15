@@ -13,6 +13,16 @@ describe("task and event section ownership", () => {
     }
   });
 
+  it("renders the server plugin run context on fresh and resumed turns", () => {
+    const text = "## Context from company plugins\n\n### Policies (plugin: Policies)\n\nBe kind.";
+    const context = createPromptContextFixture();
+    const withContext = { ...context, paperclipWake: { ...context.paperclipWake, pluginRunContext: { text, digest: "a".repeat(64) } } };
+    for (const resumedSession of [false, true]) {
+      expect(selectSections(withContext, { resumedSession }).wakePrompt).toContain(text);
+      expect(selectSections(context, { resumedSession }).wakePrompt).not.toContain("Context from company plugins");
+    }
+  });
+
   it("preserves user repetition and distinct same-body comments under their source owners", () => {
     const context = createPromptContextFixture();
     const { taskContextNote, wakePrompt } = selectSections(context);

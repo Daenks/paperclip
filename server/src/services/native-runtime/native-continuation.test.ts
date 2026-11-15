@@ -38,6 +38,13 @@ describe("native continuation event projection", () => {
     expect(events.messages[0]).toMatchObject({ body: message.body });
     expect(JSON.parse(build()!).appContext).toBeUndefined();
   });
+  it("keeps the company plugin context on a resumed turn", () => {
+    const pluginRunContext = { text: "## Context from company plugins\n\n### Policies (plugin: Policies)\n\nBe kind.", digest: "a".repeat(64) };
+    const events = JSON.parse(build({ ...wake, pluginRunContext })!);
+    expect(events.pluginRunContext).toBe(pluginRunContext.text);
+    expect(events.messages[0]).toMatchObject({ body: message.body });
+    expect(JSON.parse(build({ ...wake, pluginRunContext: null })!).pluginRunContext).toBeUndefined();
+  });
   it("only uses a delta whose base matches the actual previous run", () => {
     expect(build({ ...wake, executionContinuation: { ...wake.executionContinuation, resumeDelta: { baseRunId: "different", messages: [message] } } })).toBeNull();
     expect(build({ ...wake, executionContinuation: null })).toBeNull();

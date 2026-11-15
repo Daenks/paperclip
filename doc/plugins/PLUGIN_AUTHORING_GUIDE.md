@@ -204,6 +204,60 @@ candidates and return provider-stable identities. Implement
 Paperclip owns inline markdown rendering; plugins must not return React, HTML,
 or `dangerouslySetInnerHTML` content for inline references.
 
+## Run context contributions
+
+Use `onContributeRunContext` to add text to every run of a company's agents,
+for example company policies. Declare `agent.run.context.contribute` in the
+manifest. The host calls the handler once per run, for each company where the
+plugin is ready and not disabled. See
+[PLUGIN_SPEC.md §13.11](PLUGIN_SPEC.md#1311-contributeruncontext) for the full
+contract.
+
+```ts
+import { definePlugin, type PluginContext } from "@paperclipai/plugin-sdk";
+
+let ctx: PluginContext;
+
+export default definePlugin({
+  async setup(context) { ctx = context; },
+  async onContributeRunContext({ companyId }) {
+    const markdown = await ctx.state.get({ scopeKind: "company", scopeId: companyId, stateKey: "policy" });
+    if (typeof markdown !== "string" || !markdown.trim()) return {};
+    return { sections: [{ title: "Company policies", markdown }] };
+  },
+});
+```
+
+The request contains only `companyId`, `agentId`, `runId`, `issueId`, and
+`adapterType`. Read anything else through the clients your other capabilities
+allow; the example also needs `plugin.state.read`. Scope every read to the
+request's `companyId`.
+
+The host enforces the limits: at most 8 sections, titles of at most 120
+characters on one line, and at most 20,000 characters of markdown in total.
+The SDK exports them as `PLUGIN_RUN_CONTEXT_MAX_SECTIONS`,
+`PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS`, and `PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS`.
+A result over a limit is dropped whole, so check lengths when you save content,
+not only when you return it. The host waits at most 3 seconds
+(`PLUGIN_RUN_CONTEXT_TIMEOUT_MS`). A plugin that does not answer in time, throws,
+or is not running is skipped with a warning in the run log; the run continues.
+Keep the handler to a fast local read.
+
+Test the handler with the SDK harness. It checks the capability and applies the
+host's limits, and it throws the host's reason when the host would drop the
+result:
+
+```ts
+import { createTestHarness } from "@paperclipai/plugin-sdk/testing";
+import plugin from "../src/worker.js";
+import manifest from "../src/manifest.js";
+
+const harness = createTestHarness({ manifest });
+await plugin.definition.setup(harness.ctx);
+const result = await harness.contributeRunContext(plugin, { companyId: "company-1" });
+// result: { sections: [{ title, markdown }] }, with surrounding whitespace trimmed
+```
+
 ## Scaffold a plugin
 
 Use the CLI scaffold command:

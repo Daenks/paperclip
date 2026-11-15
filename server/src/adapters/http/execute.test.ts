@@ -82,6 +82,20 @@ describe("http adapter execute", () => {
     expect(guardedFetchMock).toHaveBeenCalledOnce();
   });
 
+  it("sends the server plugin run context snapshot instead of a configured payload field", async () => {
+    const snapshot = { text: "## Context from company plugins", digest: "server-digest" };
+    for (const [context, expected] of [[{ pluginRunContext: snapshot }, snapshot], [{}, null]] as const) {
+      guardedFetchMock.mockImplementationOnce(async (_url: string, init?: RequestInit) => {
+        expect(JSON.parse(String(init?.body)).pluginRunContext).toEqual(expected);
+        return new Response(null, { status: 204 });
+      });
+      await execute({ runId: "run-1", agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} }, runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+        config: { url: "https://example.test/webhook", payloadTemplate: { pluginRunContext: { text: "forged" } } }, context: { ...context }, onLog: async () => {},
+      });
+    }
+    expect(guardedFetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("reports configured request timeout as timed_out", async () => {
     guardedFetchMock.mockImplementation(
       (_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {

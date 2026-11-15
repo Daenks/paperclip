@@ -1139,6 +1139,21 @@ save; `instruction_save` remains authoritative for collection. The event contain
 no raw exception, host path, file contents, or lock-owner metadata. Failure to
 write the warning must not replace the provider outcome or stop lease release.
 
+## Plugin run context
+
+`plugin_run_context.applied` (info) is written once per run when plugins with
+`agent.run.context.contribute` added sections to the run. Its payload is
+`{ digest, characterCount, plugins: [{ pluginKey, sectionCount, characterCount }] }`:
+the SHA-256 of the composed block, the block's length, and per plugin the number
+of sections and characters of markdown. It never contains the section text.
+
+`plugin_run_context.skipped` (warn) is written once per run when one or more
+plugins were asked and their sections were not added. Its payload is
+`{ skipped: [{ pluginKey, reason, message }] }`. `reason` is one of `timeout`,
+`worker_unavailable`, `error`, or `invalid_result`. `message` is a fixed host
+message; for `invalid_result` it names the limit or field that failed. Worker
+error text and plugin output are not recorded. The run continues in both cases.
+
 ## Agent observability availability
 
 `agent_observability.unavailable` is one warning for a preparation snapshot that

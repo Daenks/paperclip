@@ -446,6 +446,28 @@ describe("execute", () => {
     expect(prompt.split(commentBody)).toHaveLength(2);
   });
 
+  it("sends the server plugin run context once in the run input", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/v1/runs")) return new Response(JSON.stringify({ run_id: "run-hermes-1", status: "started" }), { status: 200 });
+      return new Response(JSON.stringify({ status: "completed", output: "done" }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = makeCtx({ apiBaseUrl: "http://127.0.0.1:8642", apiKey: "secret-key" });
+    ctx.context = {
+      issueId: "issue-1",
+      paperclipWake: {
+        reason: "issue_assigned",
+        issue: { id: "issue-1", identifier: "PAP-1", title: "Do the thing", status: "in_progress" },
+        pluginRunContext: { text: "## Context from company plugins\n\n### Policies (plugin: Policies)\n\nAlways cite sources.", digest: "a".repeat(64) },
+      },
+    };
+    await execute(ctx);
+    const calls = fetchMock.mock.calls as Array<[RequestInfo | URL, RequestInit?]>;
+    const runCall = calls.find(([input]) => String(input).endsWith("/v1/runs"));
+    const prompt = JSON.parse(String(runCall?.[1]?.body)).input as string;
+    expect(prompt.split("Always cite sources.")).toHaveLength(2);
+  });
+
   it("routes the default Hermes dashboard chat URL on port 9119 through the API prefix", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

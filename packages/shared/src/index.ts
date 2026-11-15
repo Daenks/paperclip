@@ -2876,6 +2876,7 @@ export * from "./agent-appearance.js";
 export * from "./attention-audience.js";
 export * from "./ai-connections.js";
 export * from "./ai-connection-router.js";
+export * from "./plugin-run-context.js";
 export * from "./ai-connection-usage.js";
 export * from "./subscriptions.js";
 export * from "./types/email.js";

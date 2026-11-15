@@ -601,6 +601,7 @@ Optional methods:
 - `getData(input)`
 - `performAction(input)`
 - `executeTool(input)`
+- `contributeRunContext(input)`
 
 ### 13.1 `initialize`
 
@@ -711,6 +712,100 @@ The host provides:
   (the project ID is an empty string when the run has no project)
 
 The worker executes the tool and returns a typed result (string content, structured data, or error).
+
+### 13.11 `contributeRunContext`
+
+Adds sections to the context of an agent run. Requires the
+`agent.run.context.contribute` capability. SDK handler:
+`onContributeRunContext(params)`.
+
+The host calls this method once per run, while it prepares the run
+configuration, for every plugin that:
+
+- has status `ready`
+- declares `agent.run.context.contribute`
+- implements the handler (reported in `initialize` `supportedMethods`)
+- is not disabled for the run's company in its company plugin settings
+
+Fresh and resumed sessions both receive the result. If no plugin qualifies,
+no call is made.
+
+The request carries identifiers only:
+
+```ts
+interface PluginRunContextRequest {
+  companyId: string;
+  agentId: string;
+  runId: string;
+  issueId: string | null; // task the run is for, when there is one
+  adapterType: string;
+}
+```
+
+The worker returns:
+
+```ts
+interface PluginRunContextResult {
+  sections?: Array<{
+    title: string;    // plain text, one line
+    markdown: string; // markdown body
+  }>;
+}
+```
+
+An empty or omitted `sections` contributes nothing.
+
+Host limits, per plugin and per run:
+
+- at most 8 sections
+- a title of at most 120 characters, on one line, not blank
+- markdown that is not blank, at most 20,000 characters summed over the sections
+
+Characters are counted as JavaScript string length. A result over a limit, or
+of the wrong shape, is dropped whole and reported in the run log. It is never
+truncated.
+
+The host calls the plugins in parallel and waits at most 3 seconds for each.
+A timeout, an error, a worker that is not running, or a dropped result does
+not fail the run. The run continues without that plugin's sections, and a
+`plugin_run_context.skipped` warning run event names the plugin and the
+reason. See `doc/run-log-events.md`.
+
+The host composes one block, ordered by plugin key and then by section order:
+
+```text
+## Context from company plugins
+
+The following sections were added by plugins installed for this company.
+
+### <title> (plugin: <plugin display name>)
+
+<markdown>
+```
+
+The snapshot is `{ text, digest }`, where `digest` is the SHA-256 hex of `text`.
+When a block is applied, the `plugin_run_context.applied` run event records the
+digest and, per plugin, its key, section count and character count. It never
+records the text.
+
+The block is server-owned: the server always overwrites it, and a caller's wake
+data cannot supply it. It is delivered with the run context on the task message
+side, not in the system prompt:
+
+- **Built-in CLI and gateway adapters, and Paperclip Runner bootstraps:** the
+  shared wake prompt renders it after connection instructions.
+- **Paperclip Runner resumed sessions:** the continuation events carry it as
+  `pluginRunContext` text.
+- **HTTP adapter:** the JSON request contains top-level `pluginRunContext`
+  (`{ text, digest }` or `null`), also available on invocation `context`. It
+  overrides `payloadTemplate`.
+- **Process adapter:** `PAPERCLIP_PLUGIN_RUN_CONTEXT_FILE` points to a private
+  JSON file with the same snapshot. It is an empty string when there is no
+  block. Configured or inherited values cannot override it. The file is removed
+  when the process exits.
+
+Custom HTTP and process adapters should append the snapshot's `text` to the
+model prompt.
 
 ## 14. SDK Surface
 
@@ -935,6 +1030,11 @@ The host enforces capabilities in the SDK layer and refuses calls outside the gr
 ### Agent Tools
 
 - `agent.tools.register`
+
+### Agent Run Context
+
+- `agent.run.context.contribute`: the host asks the plugin for sections to add
+  to each run of the company's agents (§13.11)
 
 ### UI
 

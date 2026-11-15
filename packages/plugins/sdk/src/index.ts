@@ -488,6 +488,8 @@ export { environmentTaskErrorData, readEnvironmentTaskErrorDiagnostic } from "./
 export type { PluginEnvironmentTaskErrorDiagnostic } from "./environment-task-error.js";
 
 export type { AiConnectionPool, AiConnectionPoolConfig, AiConnectionPoolMember, AiConnectionRouterRequest, AiConnectionRouterResult, AiConnectionRouterSelection } from "@paperclipai/shared";
+export type { PluginRunContextRequest, PluginRunContextResult, PluginRunContextSection } from "@paperclipai/shared";
+export { PLUGIN_RUN_CONTEXT_MAX_MARKDOWN_CHARS, PLUGIN_RUN_CONTEXT_MAX_SECTIONS, PLUGIN_RUN_CONTEXT_MAX_TITLE_CHARS, PLUGIN_RUN_CONTEXT_TIMEOUT_MS } from "@paperclipai/shared";
 
 export { MAX_ENVIRONMENT_TASK_FILE_BYTES, environmentRunnerLaunchRequirementsSchema, environmentTaskOperationSchema, environmentTaskResultSchema, environmentTaskCredentialSchema, environmentTaskConfiguredEnvironmentSchema, MAX_CONFIGURED_ENVIRONMENT_KEYS, MAX_CONFIGURED_ENVIRONMENT_ENTRY_BYTES, MAX_CONFIGURED_ENVIRONMENT_BYTES, parseEnvironmentTaskResult } from "./environment-tasks.js";
 export type { PluginEnvironmentTaskOperation, PluginEnvironmentTaskParams, PluginEnvironmentTaskResult, PluginEnvironmentTaskCredential, PluginEnvironmentTaskConfiguredEnvironment, PluginEnvironmentTaskExecutionContext } from "./environment-tasks.js";
