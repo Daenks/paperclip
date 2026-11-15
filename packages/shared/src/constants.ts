@@ -1346,7 +1346,7 @@ export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number];
  * plugin capability validator.
  *
  * Grouped into: Data Read, Data Write, Plugin State, Runtime/Integration,
- * Agent Tools, and UI.
+ * Agent Tools, Agent Run Context, and UI.
  *
  * @see PLUGIN_SPEC.md §15 — Capability Model
  */
@@ -1446,6 +1446,8 @@ export const PLUGIN_CAPABILITIES = [
   "local.folders",
   // Agent Tools
   "agent.tools.register",
+  // Agent Run Context: the host asks the plugin for sections to add to each run.
+  "agent.run.context.contribute",
   // UI
   "instance.settings.register",
   "ui.sidebar.register",

@@ -99,6 +99,10 @@ describe("plugin manifest validators", () => {
     expect(pluginManifestV1Schema.safeParse({ ...manifest, capabilities: ["ui.page.register"] }).success).toBe(false);
     expect(pluginManifestV1Schema.parse({ ...manifest, capabilities: ["ai.connections.route"] }).aiConnectionRouter).toEqual(manifest.aiConnectionRouter);
   });
+  it("accepts the run-context contribution capability", () => {
+    const manifest = { id: "example.policies", apiVersion: 1, version: "0.1.0", displayName: "Policies", description: "Policies", author: "Tests", categories: ["automation"], entrypoints: { worker: "worker.js" } };
+    expect(pluginManifestV1Schema.parse({ ...manifest, capabilities: ["agent.run.context.contribute"] }).capabilities).toEqual(["agent.run.context.contribute"]);
+  });
   it("accepts existing-style plugins that do not request access or authorization capabilities", () => {
     const parsed = pluginManifestV1Schema.parse({
       id: "paperclip.compat-dashboard",

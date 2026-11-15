@@ -1245,6 +1245,37 @@ describe("AI connection router RPC", () => {
   });
 });
 
+describe("Run context contribution RPC", () => {
+  it("advertises and calls the hook only when the plugin implements it", async () => {
+    const request = { companyId: "company", agentId: "agent", runId: "run", issueId: null, adapterType: "process" };
+    const manifest = { id: "fixture.context", apiVersion: 1, version: "1.0.0", displayName: "Context", description: "Fixture", author: "Tests", categories: ["automation"], capabilities: ["agent.run.context.contribute"], entrypoints: {} };
+    const start = (plugin: ReturnType<typeof definePlugin>) => {
+      const input = new PassThrough(), output = new PassThrough();
+      const reader = createInterface({ input: output });
+      const worker = startWorkerRpcHost({ plugin, stdin: input, stdout: output });
+      let sequence = 0;
+      const pending = new Map<string, (value: unknown) => void>();
+      reader.on("line", line => { const response = parseMessage(line); if (isJsonRpcResponse(response)) { pending.get(String(response.id))?.(response); pending.delete(String(response.id)); } });
+      const call = (method: string, params: unknown) => new Promise<JsonRpcResponse>(resolve => { const id = String(++sequence); pending.set(id, value => resolve(value as JsonRpcResponse)); input.write(serializeMessage(createRequest(method, params, id))); });
+      return { call, stop: () => { worker.stop(); reader.close(); input.destroy(); output.destroy(); } };
+    };
+    let received: unknown;
+    const implemented = start(definePlugin({ async setup() {}, async onContributeRunContext(params) { received = params; return { sections: [{ title: "Policies", markdown: "Be kind." }] }; } }));
+    try {
+      const initialized = await implemented.call("initialize", { manifest, config: {}, databaseNamespace: null });
+      expect((initialized as { result: { supportedMethods: string[] } }).result.supportedMethods).toContain("contributeRunContext");
+      expect((await implemented.call("contributeRunContext", request) as { result: unknown }).result).toEqual({ sections: [{ title: "Policies", markdown: "Be kind." }] });
+      expect(received).toEqual(request);
+    } finally { implemented.stop(); }
+    const missing = start(definePlugin({ async setup() {} }));
+    try {
+      const initialized = await missing.call("initialize", { manifest, config: {}, databaseNamespace: null });
+      expect((initialized as { result: { supportedMethods: string[] } }).result.supportedMethods).not.toContain("contributeRunContext");
+      expect((await missing.call("contributeRunContext", request) as { error?: { code: number } }).error?.code).toBe(PLUGIN_RPC_ERROR_CODES.METHOD_NOT_IMPLEMENTED);
+    } finally { missing.stop(); }
+  });
+});
+
 describe("Durable lifecycle inbox RPC", () => {
   it("sends company-scoped reads and acknowledgments through the worker SDK", async () => {
     const input = new PassThrough(), output = new PassThrough();

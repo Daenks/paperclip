@@ -461,6 +461,7 @@ Declare in `manifest.capabilities`. Grouped by scope:
 | | `environment.drivers.register` |
 | | `local.folders` |
 | **Agent** | `agent.tools.register` |
+| | `agent.run.context.contribute` |
 | | `agents.invoke` |
 | | `access.members.write` |
 | | `access.invites.write` |
@@ -1373,6 +1374,10 @@ const harness = createTestHarness({ manifest });
 await plugin.definition.setup(harness.ctx);
 await harness.emit("issue.created", { issueId: "iss_1" }, { entityId: "iss_1", entityType: "issue" });
 ```
+
+`harness.contributeRunContext(plugin, request?)` calls `onContributeRunContext`
+with the host's capability check and limits. See "Run context contributions" in
+`doc/plugins/PLUGIN_AUTHORING_GUIDE.md`.
 
 ## Bundler presets
 
