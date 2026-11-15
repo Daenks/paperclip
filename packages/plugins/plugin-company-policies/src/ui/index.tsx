@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import {
+  useHostContext,
   usePluginAction,
   usePluginData,
   type PluginCompanySettingsPageProps,
@@ -35,7 +36,17 @@ function formatSavedAt(iso: string): string {
 
 export function CompanyPoliciesSettingsPage({ context }: PluginCompanySettingsPageProps) {
   const companyId = context.companyId;
-  const policyQuery = usePluginData<CompanyPolicyView>(POLICY_DATA_KEY, companyId ? { companyId } : undefined);
+  if (!companyId) {
+    return <div className="text-sm text-muted-foreground">Select a company to edit its policies.</div>;
+  }
+  // A new company gets a fresh form, so nothing typed or loaded for another company can be saved here.
+  return <CompanyPoliciesForm key={companyId} companyId={companyId} />;
+}
+
+function CompanyPoliciesForm({ companyId }: { companyId: string }) {
+  // The slot props carry only the company; the signed-in user is on the bridge host context.
+  const { userId } = useHostContext();
+  const policyQuery = usePluginData<CompanyPolicyView>(POLICY_DATA_KEY, { companyId });
   const savePolicy = usePluginAction(SAVE_POLICY_ACTION_KEY);
   const textareaId = useId();
   const counterId = useId();
@@ -49,15 +60,13 @@ export function CompanyPoliciesSettingsPage({ context }: PluginCompanySettingsPa
 
   // Load the stored policy into the form once per company, and again after a save or reload.
   useEffect(() => {
-    if (!policyQuery.data) return;
+    // Accept only this company's policy; Save stays disabled until it has loaded.
+    if (!policyQuery.data || policyQuery.data.companyId !== companyId) return;
     setSaved(policyQuery.data);
     setMarkdown(policyQuery.data.markdown);
     setEnabled(policyQuery.data.enabled);
-  }, [policyQuery.data]);
+  }, [policyQuery.data, companyId]);
 
-  if (!companyId) {
-    return <div className="text-sm text-muted-foreground">Select a company to edit its policies.</div>;
-  }
   if (policyQuery.error) {
     return (
       <div role="alert" className="max-w-2xl rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -75,7 +84,7 @@ export function CompanyPoliciesSettingsPage({ context }: PluginCompanySettingsPa
   const dirty = markdown !== saved.markdown || enabled !== saved.enabled;
 
   async function handleSave() {
-    if (!saved || overLimit) return;
+    if (!saved || saved.companyId !== companyId || overLimit) return;
     setSaving(true);
     setSaveError(null);
     setJustSaved(false);
@@ -164,7 +173,7 @@ export function CompanyPoliciesSettingsPage({ context }: PluginCompanySettingsPa
             {justSaved
               ? "Saved"
               : saved.updatedAt
-                ? `Last saved ${formatSavedAt(saved.updatedAt)}${saved.updatedBy && saved.updatedBy === context.userId ? " by you" : ""}`
+                ? `Last saved ${formatSavedAt(saved.updatedAt)}${saved.updatedBy && saved.updatedBy === userId ? " by you" : ""}`
                 : "Not saved yet"}
           </div>
         </div>
