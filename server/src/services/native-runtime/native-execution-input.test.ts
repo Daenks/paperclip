@@ -660,6 +660,25 @@ describe("Cursor mode native execution projection", () => {
   });
 });
 
+describe("Company plugin context in native execution input", () => {
+  it("puts the server snapshot in the bootstrap prompt, not the system instructions", () => {
+    const text = "## Context from company plugins\n\n### Policies (plugin: Policies)\n\nBe kind.";
+    const base = {
+      companyId: "company-1", runId: "run-1", agentId: "agent-1",
+      issue: { id: "issue-1", identifier: "CTX-1", title: "Write a welcome", description: null, workMode: "standard" },
+      taskPrompt: "Write the welcome.",
+      workspace: { id: "workspace-1", cwd: "/workspace", repoUrl: null, repoRef: null, branchName: null },
+      normalizedSessionId: null, provider: "codex" as const, model: "gpt-5.6-sol",
+      completionContract: { id: "contract-1", sha256: `sha256:${"a".repeat(64)}`, schemaVersion: "paperclip.run-result.v1", contract: { revision: "1", objective: "Write", criteria: [{ id: "output", requirement: "Write" }] } },
+      runtimeContext: nativeRuntimeContextFixture(),
+    };
+    const input = buildNativeExecutionInput({ ...base, wakePayload: { reason: "issue_assigned", pluginRunContext: { text, digest: "b".repeat(64) } } });
+    expect(input.task.prompt).toContain(text);
+    expect(input.runtimeContext).not.toHaveProperty("pluginRunContext");
+    expect(buildNativeExecutionInput({ ...base, wakePayload: { reason: "issue_assigned", pluginRunContext: null } }).task.prompt).not.toContain("Context from company plugins");
+  });
+});
+
 describe("Pi thinking native execution projection", () => {
   function fixture(piThinkingLevel?: "off" | "low" | "high" | "max") {
     return {

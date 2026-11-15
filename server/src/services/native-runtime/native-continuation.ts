@@ -2,6 +2,10 @@ import { isPaperclipExternalChatContractTurn, normalizePaperclipWakePayload, PAP
 import type { CaseExecutionContext, projectCaseContinuation } from "../case-context.js";
 import { caseInstructionAlreadyRepresented } from "../case-context.js";
 
+const pluginRunContextText = (value: unknown) =>
+  value && typeof value === "object" && typeof (value as { text?: unknown }).text === "string"
+    ? (value as { text: string }).text.trim() : "";
+
 /** Only new, authorized events belong in an already retained provider conversation.
  * Full bootstrap input is kept separately for an actual provider resume failure.
  */
@@ -87,6 +91,8 @@ export function buildNativeContinuationPrompt(input: {
     // Server-rendered "App context (untrusted)" from the task's MCP Apps widgets:
     // a resumed turn sees the current selection as well as the new comment.
     ...(typeof rawWake.mcpAppContext === "string" && rawWake.mcpAppContext.trim() ? { appContext: rawWake.mcpAppContext.trim() } : {}),
+    // Server-composed company plugin sections, current for this turn.
+    ...(pluginRunContextText(rawWake.pluginRunContext) ? { pluginRunContext: pluginRunContextText(rawWake.pluginRunContext) } : {}),
   };
   const earlierRead = wake.comments.filter((comment) => comment.readByEarlierTurn && comment.id
     && events.messages.some((message) => message.id === comment.id)).map((comment) => comment.id!);

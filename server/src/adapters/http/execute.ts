@@ -17,6 +17,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     runId,
     context,
     connectionInstructions: context.connectionInstructions ?? null,
+    pluginRunContext: context.pluginRunContext ?? null,
     ...(ctx.runtimeTools ? { paperclipRuntimeTools: ctx.runtimeTools } : {}),
   };
 

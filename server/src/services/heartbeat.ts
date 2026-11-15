@@ -2911,7 +2911,7 @@ export function heartbeatService(
         policy: { trustPreset, useIsolatedTaskDirectory: workspaceSelection.useIsolatedTaskDirectory,
           explicitTaskDirectory: workspaceSelection.explicitTaskDirectory, requestedExecutionWorkspaceMode },
         environment: workspaceSelection,
-        services: { secretsSvc, companySkills, appendRunEvent, finalizeAiConnectionBusyDeferral },
+        services: { secretsSvc, companySkills, appendRunEvent, finalizeAiConnectionBusyDeferral, pluginWorkerManager: options.pluginWorkerManager },
         onFailureSecretsResolved: (readSecrets) => { readFailureReportSecrets = () => [...readSecrets(), ...identityRedactor.values]; },
         onManagedAiRuntimeAcquired: (runtime) => { managedAiRuntime = runtime; },
         onIdentityRedactorPrepared: (redactor) => { identityRedactor = redactor; },

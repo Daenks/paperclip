@@ -156,6 +156,16 @@ describe("openclaw_gateway execute dispatch boundary", () => {
     expect(prompt).not.toContain("Structured wake payload JSON:");
   });
 
+  it.each([false, true])("sends the server plugin run context once (resumed=%s)", async (resumed) => {
+    const text = "## Context from company plugins\n\n### Policies (plugin: Policies)\n\nAlways cite sources.";
+    const ctx = createContext();
+    const fixture = createPromptContextFixture();
+    ctx.context = { ...fixture, paperclipWake: { ...fixture.paperclipWake, pluginRunContext: { text, digest: "a".repeat(64) } } };
+    if (resumed) ctx.runtime.sessionId = "prior-session";
+    expect((await execute(ctx)).exitCode).toBe(0);
+    expect(websocketState.messages[0]!.split("Always cite sources.")).toHaveLength(2);
+  });
+
   it("reports dispatch after transport setup and before the remote agent request", async () => {
     const onDispatch = vi.fn(() => {
       websocketState.events.push("dispatch");

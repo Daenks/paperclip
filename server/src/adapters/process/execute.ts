@@ -83,23 +83,30 @@ async function executeProcess(ctx: AdapterExecutionContext): Promise<AdapterExec
     });
   }
 
-  const instructions = parseObject(ctx.context.connectionInstructions);
-  let instructionsDirectory: string | undefined;
-  // Override configured/inherited paths even when the connection was removed.
-  env.PAPERCLIP_CONNECTION_INSTRUCTIONS_FILE = "";
+  // Server-owned snapshots, each delivered as a private JSON file.
+  const snapshotFiles = [
+    { key: "PAPERCLIP_CONNECTION_INSTRUCTIONS_FILE", value: ctx.context.connectionInstructions, prefix: "paperclip-connection-instructions-", name: "instructions.json" },
+    { key: "PAPERCLIP_PLUGIN_RUN_CONTEXT_FILE", value: ctx.context.pluginRunContext, prefix: "paperclip-plugin-run-context-", name: "context.json" },
+  ] as const;
+  const snapshotDirectories: string[] = [];
+  // Override configured/inherited paths even when the snapshot was removed.
+  for (const { key } of snapshotFiles) env[key] = "";
   let proc: Awaited<ReturnType<typeof runChildProcess>>;
   try {
-    if (typeof instructions.text === "string" && instructions.text) {
-      instructionsDirectory = await mkdtemp(join(tmpdir(), "paperclip-connection-instructions-"));
-      const instructionsFile = join(instructionsDirectory, "instructions.json");
-      await writeFile(instructionsFile, JSON.stringify(instructions), { mode: 0o600 });
-      env.PAPERCLIP_CONNECTION_INSTRUCTIONS_FILE = instructionsFile;
+    for (const { key, value, prefix, name } of snapshotFiles) {
+      const snapshot = parseObject(value);
+      if (typeof snapshot.text !== "string" || !snapshot.text) continue;
+      const directory = await mkdtemp(join(tmpdir(), prefix));
+      snapshotDirectories.push(directory);
+      const file = join(directory, name);
+      await writeFile(file, JSON.stringify(snapshot), { mode: 0o600 });
+      env[key] = file;
     }
     proc = await runChildProcess(runId, command, args, {
       cwd, env, timeoutSec, graceSec, onLog, onSpawn: ctx.onSpawn,
     });
   } finally {
-    if (instructionsDirectory) await rm(instructionsDirectory, { recursive: true, force: true });
+    for (const directory of snapshotDirectories) await rm(directory, { recursive: true, force: true });
   }
 
   if (proc.timedOut) {
