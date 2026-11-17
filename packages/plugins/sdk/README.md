@@ -130,7 +130,7 @@ runWorker(plugin, import.meta.url);
 | `onValidateConfig?(config)` | Optional. Return `{ ok, warnings?, errors? }` for settings UI / Test Connection. |
 | `onWebhook?(input)` | Optional. Handle `POST /api/plugins/:pluginId/webhooks/:endpointKey`; required if webhooks declared. |
 
-**Context (`ctx`) in setup:** `config`, `localFolders`, `events`, `jobs`, `launchers`, `http`, `secrets`, `activity`, `state`, `entities`, `projects`, `companies`, `issues`, `agents`, `goals`, `access`, `authorization`, `data`, `actions`, `streams`, `tools`, `metrics`, `logger`, `manifest`. Worker-side host APIs are capability-gated; declare capabilities in the manifest.
+**Context (`ctx`) in setup:** `config`, `localFolders`, `events`, `jobs`, `launchers`, `http`, `secrets`, `activity`, `state`, `entities`, `projects`, `companies`, `issues`, `agents`, `goals`, `costs`, `access`, `authorization`, `data`, `actions`, `streams`, `tools`, `metrics`, `logger`, `manifest`. Worker-side host APIs are capability-gated; declare capabilities in the manifest.
 
 **Agents:** `ctx.agents.invoke(agentId, companyId, opts)` for one-shot invocation. `ctx.agents.sessions` for two-way chat: `create`, `list`, `sendMessage` (with streaming `onEvent` callback), `close`. See the [Plugin Authoring Guide](../../doc/plugins/PLUGIN_AUTHORING_GUIDE.md#agent-sessions-two-way-chat) for details.
 
@@ -478,6 +478,22 @@ Declare in `manifest.capabilities`. Grouped by scope:
 | | `ui.action.register` |
 
 Full list in code: import `PLUGIN_CAPABILITIES` from `@paperclipai/plugin-sdk`.
+
+### Subscription quota windows
+
+With `costs.read`, `ctx.costs.quotaWindows(companyId)` returns the current quota windows (for example the 5-hour and weekly windows) of the company's shared AI subscription accounts, one result per account. Personal accounts of company members are never returned, and the worker never receives a credential. Each window has `label`, `usedPercent`, `resetsAt` and `valueLabel`. A failed read comes back as `ok: false` with an `errorFamily`. The host caches each account for 30 seconds.
+
+```ts
+const accounts = await ctx.costs.quotaWindows(companyId);
+for (const account of accounts) {
+  if (!account.ok) continue;
+  for (const window of account.windows) {
+    ctx.logger.info("quota", { provider: account.provider, window: window.label, usedPercent: window.usedPercent });
+  }
+}
+```
+
+In tests, seed results with `harness.seed({ quotaWindows: [{ companyId, results }] })`.
 
 ### External Object Reference Providers
 

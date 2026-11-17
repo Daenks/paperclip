@@ -1,7 +1,7 @@
 import type { PluginWorkspaceParams, PluginWorkspacePrepareParams, PluginWorkspacePrepareResult, PluginWorkspaceResult } from "./workspace-provider.js";
 import type { PluginEnvironmentTaskParams, PluginEnvironmentTaskResult } from "./environment-tasks.js";
 import type { PluginAgentRuntimeState, PluginAgentRuntimeIdentity } from "./types.js";
-import type { AgentLifecycleRequest, AgentLifecycleResult } from "@paperclipai/shared";
+import type { AgentLifecycleRequest, AgentLifecycleResult, ProviderQuotaResult } from "@paperclipai/shared";
 import type { AiConnectionRouterRequest, AiConnectionRouterResult } from "@paperclipai/shared";
 /**
  * JSON-RPC 2.0 message types and protocol helpers for the host ↔ worker IPC
@@ -2269,6 +2269,12 @@ export interface WorkerToHostMethods {
   "agents.sessions.close": [
     params: { sessionId: string; companyId: string },
     result: void,
+  ];
+
+  // Costs
+  "costs.quotaWindows": [
+    params: { companyId: string },
+    result: ProviderQuotaResult[],
   ];
 
   // Goals

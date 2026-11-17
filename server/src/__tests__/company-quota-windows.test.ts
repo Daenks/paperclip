@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@paperclipai/db";
 const mocks = vi.hoisted(() => ({
   accounts: vi.fn(),
+  sharedAccounts: vi.fn(),
   credential: vi.fn(),
   refresh: vi.fn(),
   codex: vi.fn(),
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../services/ai-connections.js", () => ({
   aiConnectionService: () => ({
     quotaAccounts: mocks.accounts,
+    sharedQuotaAccounts: mocks.sharedAccounts,
     credential: mocks.credential,
     refreshQuotaCredential: mocks.refresh,
   }),
@@ -24,7 +26,7 @@ vi.mock("@paperclipai/adapter-codex-local/server", () => ({
 vi.mock("@paperclipai/adapter-claude-local/server", () => ({
   fetchClaudeQuota: mocks.claude,
 }));
-import { fetchCompanyQuotaWindows } from "../services/quota-windows.js";
+import { fetchCompanyQuotaWindows, fetchSharedQuotaWindows } from "../services/quota-windows.js";
 import { idleWorkSnapshot } from "../services/task-admission.js";
 
 let revision = 1;
@@ -83,6 +85,30 @@ describe("connected account quotas", () => {
     });
     expect(result[0].capturedAt).toBeDefined();
     expect(JSON.stringify(result)).not.toContain("private-token");
+  });
+  it("reads only company-shared accounts for a caller with no user", async () => {
+    mocks.sharedAccounts.mockResolvedValue([account("shared-codex")]);
+    const result = await fetchSharedQuotaWindows(db, "company-shared-1");
+    expect(mocks.sharedAccounts).toHaveBeenCalledWith("company-shared-1");
+    expect(mocks.accounts).not.toHaveBeenCalled();
+    expect(mocks.adapters).not.toHaveBeenCalled();
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      ok: true,
+      provider: "openai",
+      accountLabel: "shared-codex",
+      windows: [{ label: "5h", usedPercent: 0.5 }],
+    });
+    expect(JSON.stringify(result)).not.toContain("private-token");
+  });
+  it("reports no connected account when the company shares none", async () => {
+    mocks.sharedAccounts.mockResolvedValue([]);
+    const result = await fetchSharedQuotaWindows(db, "company-shared-2");
+    expect(result.map(row => [row.provider, row.ok, row.errorFamily])).toEqual([
+      ["anthropic", false, "credentials_unavailable"],
+      ["openai", false, "credentials_unavailable"],
+    ]);
+    expect(mocks.credential).not.toHaveBeenCalled();
   });
   it("deduplicates account requests and invalidates on credential revision", async () => {
     mocks.accounts.mockResolvedValue([account("cached-codex")]);

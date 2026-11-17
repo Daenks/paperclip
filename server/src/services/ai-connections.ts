@@ -103,6 +103,18 @@ export function aiConnectionService(db: Db) {
         ),
       );
   }
+  function accountStatus({ connection, grant }: Awaited<ReturnType<typeof rows>>[number]) {
+    return grant.status === "revoked"
+      ? ("revoked" as const)
+      : grant.status === "expired"
+        ? ("expired" as const)
+        : grant.status !== "active" ||
+            !connection.enabled ||
+            connection.status !== "active" ||
+            connection.healthStatus !== "ok" || aiSubscriptionNeedsIsolatedLogin(connection.config)
+          ? ("needs_attention" as const)
+          : ("connected" as const);
+  }
   async function list(
     companyId: string,
     userId: string,
@@ -161,17 +173,7 @@ export function aiConnectionService(db: Db) {
             owners.find((owner) => owner.id === grant.subjectUserId)?.name ??
             (grant.subjectUserId === userId ? "You" : "Account owner"),
           isDefault: defaults.some((d) => d.grantId === grant.id),
-          status:
-            grant.status === "revoked"
-              ? ("revoked" as const)
-              : grant.status === "expired"
-                ? ("expired" as const)
-                : grant.status !== "active" ||
-                    !connection.enabled ||
-                    connection.status !== "active" ||
-                    connection.healthStatus !== "ok" || needsReconnect
-                  ? ("needs_attention" as const)
-                  : ("connected" as const),
+          status: accountStatus({ connection, grant }),
         },
       ];
     }).sort((a, b) => a.id.localeCompare(b.id) || a.grantId.localeCompare(b.grantId));
@@ -1260,6 +1262,16 @@ export function aiConnectionService(db: Db) {
   }
   // A quota read uses the same credential audience as execution. Operator status
   // alone never grants access to another member's personal subscription.
+  /** Company-shared subscription accounts, for callers that act for the company rather than one user. */
+  async function sharedQuotaAccounts(companyId: string) {
+    const accounts = await rows(companyId);
+    return accounts.flatMap(row => {
+      if (row.grant.kind !== "organization") return [];
+      const metadata = aiConnectionMetadataSchema.safeParse(row.connection.config.ai);
+      if (!metadata.success || metadata.data.method !== "subscription" || !["openai", "anthropic"].includes(metadata.data.provider)) return [];
+      return [{ ...row, summary: { provider: metadata.data.provider, name: row.connection.name, status: accountStatus(row) } }];
+    }).sort((a, b) => a.connection.id.localeCompare(b.connection.id) || a.grant.id.localeCompare(b.grant.id));
+  }
   async function quotaAccounts(companyId: string, userId: string, includeOtherProviders = false) {
     if (!(await membership(companyId, userId))) return [];
     const visible = await list(companyId, userId);
@@ -1270,5 +1282,5 @@ export function aiConnectionService(db: Db) {
       return [{ ...row, summary }];
     });
   }
-  return { list, selectDecision, selectFastResponse, selectImageGeneration, selectPromptInjectionPrevention, quotaAccounts, subscriptionAccounts: (companyId: string, userId: string) => quotaAccounts(companyId, userId, true), refreshQuotaCredential, select, credential, runtimeCredential, probeUsage, accountIdentity, save, setDefault, membership, markAuthenticationFailed };
+  return { list, selectDecision, selectFastResponse, selectImageGeneration, selectPromptInjectionPrevention, quotaAccounts, sharedQuotaAccounts, subscriptionAccounts: (companyId: string, userId: string) => quotaAccounts(companyId, userId, true), refreshQuotaCredential, select, credential, runtimeCredential, probeUsage, accountIdentity, save, setDefault, membership, markAuthenticationFailed };
 }

@@ -80,6 +80,7 @@ const OPERATION_CAPABILITIES: Record<string, readonly PluginCapability[]> = {
   "activity.get": ["activity.read"],
   "costs.list": ["costs.read"],
   "costs.get": ["costs.read"],
+  "costs.quotaWindows": ["costs.read"],
   "issues.summaries.getOrchestration": ["issues.orchestration.read"],
   "db.namespace": ["database.namespace.read"],
   "db.query": ["database.namespace.read"],

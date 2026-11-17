@@ -20,6 +20,7 @@ import type {
   IssueDocument,
   Agent,
   Goal,
+  ProviderQuotaResult,
   Approval,
 } from "@paperclipai/shared";
 import type {
@@ -122,6 +123,8 @@ export interface TestHarness {
     approvals?: Approval[];
     agents?: Agent[];
     goals?: Goal[];
+    /** Results returned by `ctx.costs.quotaWindows`, keyed by company. */
+    quotaWindows?: Array<{ companyId: string; results: ProviderQuotaResult[] }>;
     projectWorkspaces?: PluginWorkspace[];
     executionWorkspaces?: PluginExecutionWorkspaceMetadata[];
     accessMembers?: PluginAccessMember[];
@@ -521,6 +524,7 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
   const issueDocuments = new Map<string, IssueDocument>();
   const agents = new Map<string, Agent>();
   const goals = new Map<string, Goal>();
+  const quotaWindows = new Map<string, ProviderQuotaResult[]>();
   const accessMembers = new Map<string, PluginAccessMember>();
   const principalGrants = new Map<string, PrincipalPermissionGrant[]>();
 
@@ -2336,6 +2340,12 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         },
       },
     },
+    costs: {
+      async quotaWindows(companyId) {
+        requireCapability(manifest, capabilitySet, "costs.read");
+        return structuredClone(quotaWindows.get(requireCompanyId(companyId)) ?? []);
+      },
+    },
     goals: {
       async list(input) {
         requireCapability(manifest, capabilitySet, "goals.read");
@@ -2647,6 +2657,7 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
       for (const row of input.approvals ?? []) approvals.set(row.id, row);
       for (const row of input.agents ?? []) agents.set(row.id, row);
       for (const row of input.goals ?? []) goals.set(row.id, row);
+      for (const row of input.quotaWindows ?? []) quotaWindows.set(row.companyId, row.results);
       for (const row of input.projectWorkspaces ?? []) {
         const list = projectWorkspaces.get(row.projectId) ?? [];
         list.push(row);
