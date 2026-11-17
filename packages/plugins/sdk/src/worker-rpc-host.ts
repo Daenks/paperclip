@@ -1285,6 +1285,12 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
         },
       },
 
+      costs: {
+        async quotaWindows(companyId: string) {
+          return callHost("costs.quotaWindows", { companyId });
+        },
+      },
+
       goals: {
         async list(input) {
           return callHost("goals.list", {

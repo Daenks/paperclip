@@ -16,8 +16,25 @@ const publicError = "Subscription quota is currently unavailable. Check usage wi
 /** Managed connections use their own credentials regardless of where agents run.
  * Never silently substitute the control-plane host's login for a remote account. */
 export async function fetchCompanyQuotaWindows(db: Db, companyId: string, userId: string): Promise<ProviderQuotaResult[]> {
+  return readQuotaWindows(db, companyId, userId, service => service.quotaAccounts(companyId, userId));
+}
+
+/** Quota of the company-shared subscription accounts only. A caller with no
+ * user, such as a plugin, never sees a member's personal account. */
+export async function fetchSharedQuotaWindows(db: Db, companyId: string): Promise<ProviderQuotaResult[]> {
+  return readQuotaWindows(db, companyId, "company-shared", service => service.sharedQuotaAccounts(companyId));
+}
+
+type QuotaAccount = Awaited<ReturnType<ReturnType<typeof aiConnectionService>["sharedQuotaAccounts"]>>[number];
+
+async function readQuotaWindows(
+  db: Db,
+  companyId: string,
+  cacheScope: string,
+  listAccounts: (service: ReturnType<typeof aiConnectionService>) => Promise<QuotaAccount[]>,
+): Promise<ProviderQuotaResult[]> {
   const service = aiConnectionService(db);
-  const accounts = await service.quotaAccounts(companyId, userId);
+  const accounts = await listAccounts(service);
   if (!accounts.length) {
     return ["anthropic", "openai"].map(provider => ({ provider, ok: false,
       accountKey: `unconnected:${companyId}:${provider}`, source: "managed-connection",
@@ -48,7 +65,7 @@ export async function fetchCompanyQuotaWindows(db: Db, companyId: string, userId
     if (row.summary.status !== "connected" || definitionUnavailable) {
       return { ...base, ok: false, errorFamily: "credentials_unavailable", error: publicError, windows: [] };
     }
-    const key = `${userId}:${accountKey}`;
+    const key = `${cacheScope}:${accountKey}`;
     let pending = accountRequests.get(key);
     if (!pending || pending.expires <= Date.now()) {
       const controller = new AbortController();
@@ -76,7 +93,7 @@ export async function fetchCompanyQuotaWindows(db: Db, companyId: string, userId
               auth = JSON.parse(await service.refreshQuotaCredential(row, value, controller.signal));
               // Rotation changes both the grant and secret revision. Return and
               // cache the observation under the identity the next poll will see.
-              const refreshed = (await service.quotaAccounts(companyId, userId)).find(candidate =>
+              const refreshed = (await listAccounts(service)).find(candidate =>
                 candidate.connection.id === row.connection.id && candidate.grant.id === row.grant.id);
               if (!refreshed || refreshed.summary.status !== "connected") throw new Error("credentials_unavailable");
               base = identity(refreshed, await readRevisions(refreshed.grant.credentialSecretRefs.map(ref => ref.secretId)));
@@ -84,7 +101,7 @@ export async function fetchCompanyQuotaWindows(db: Db, companyId: string, userId
               // cache identity to one revision, rather than label old quota with
               // a newer account's key. A concurrent change defers this poll.
               const refreshedValue = await service.credential(refreshed);
-              const verified = (await service.quotaAccounts(companyId, userId)).find(candidate =>
+              const verified = (await listAccounts(service)).find(candidate =>
                 candidate.connection.id === row.connection.id && candidate.grant.id === row.grant.id);
               if (!verified || verified.summary.status !== "connected") throw new Error("credentials_unavailable");
               const verifiedIdentity = identity(verified, await readRevisions(verified.grant.credentialSecretRefs.map(ref => ref.secretId)));
@@ -113,7 +130,7 @@ export async function fetchCompanyQuotaWindows(db: Db, companyId: string, userId
         if (observation.ok && observation.accountKey !== accountKey) {
           if (accountRequests.get(key)?.result === bounded) accountRequests.delete(key);
           if (accountRequests.size >= 500) accountRequests.delete(accountRequests.keys().next().value!);
-          accountRequests.set(`${userId}:${observation.accountKey}`, { result: Promise.resolve(observation), expires: Date.now() + 30_000 });
+          accountRequests.set(`${cacheScope}:${observation.accountKey}`, { result: Promise.resolve(observation), expires: Date.now() + 30_000 });
         }
         return observation;
       });

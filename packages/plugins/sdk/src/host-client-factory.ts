@@ -295,6 +295,11 @@ export interface HostServices {
     close(params: WorkerToHostMethods["agents.sessions.close"][0]): Promise<void>;
   };
 
+  /** Provides `costs.quotaWindows`. */
+  costs: {
+    quotaWindows(params: WorkerToHostMethods["costs.quotaWindows"][0]): Promise<WorkerToHostMethods["costs.quotaWindows"][1]>;
+  };
+
   /** Provides `goals.list`, `goals.get`, `goals.create`, `goals.update`. */
   goals: {
     list(params: WorkerToHostMethods["goals.list"][0]): Promise<WorkerToHostMethods["goals.list"][1]>;
@@ -513,6 +518,9 @@ const METHOD_CAPABILITY_MAP: Record<WorkerToHostMethodName, PluginCapability | n
   "agents.sessions.list": "agent.sessions.list",
   "agents.sessions.sendMessage": "agent.sessions.send",
   "agents.sessions.close": "agent.sessions.close",
+
+  // Costs
+  "costs.quotaWindows": "costs.read",
 
   // Goals
   "goals.list": "goals.read",
@@ -1070,6 +1078,11 @@ export function createHostClientHandlers(
     }),
     "agents.sessions.close": gated("agents.sessions.close", async (params) => {
       return services.agentSessions.close(params);
+    }),
+
+    // Costs
+    "costs.quotaWindows": gated("costs.quotaWindows", async (params) => {
+      return services.costs.quotaWindows(params);
     }),
 
     // Goals

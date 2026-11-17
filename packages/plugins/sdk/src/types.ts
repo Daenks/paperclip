@@ -49,6 +49,8 @@ import type {
   RoutineRun,
   Agent,
   Goal,
+  ProviderQuotaResult,
+  QuotaWindow,
   HumanCompanyMembershipRole,
   InviteJoinType,
   MembershipStatus,
@@ -150,6 +152,8 @@ export type {
   IssueSurfaceVisibility,
   Agent,
   Goal,
+  ProviderQuotaResult,
+  QuotaWindow,
   HumanCompanyMembershipRole,
   InviteJoinType,
   MembershipStatus,
@@ -1842,6 +1846,25 @@ export interface PluginAgentSessionsClient {
  * - `goals.create` for create
  * - `goals.update` for update
  */
+/**
+ * `ctx.costs` — read company cost and quota information.
+ *
+ * Requires `costs.read` capability.
+ */
+export interface PluginCostsClient {
+  /**
+   * Read the current subscription quota windows of the company-shared AI
+   * subscription accounts (for example the 5-hour and weekly windows of a
+   * ChatGPT or Claude subscription).
+   *
+   * One result per account. Personal accounts of company members are never
+   * returned. A failed read returns `ok: false` with an `errorFamily` and no
+   * windows. The host caches each account for a short time, so polling more
+   * often than once a minute returns the same observation.
+   */
+  quotaWindows(companyId: string): Promise<ProviderQuotaResult[]>;
+}
+
 export interface PluginGoalsClient {
   list(input: {
     companyId: string;
@@ -2270,6 +2293,9 @@ export interface PluginContext {
 
   /** Read and mutate goals. Requires `goals.read` for reads; `goals.create` / `goals.update` for write ops. */
   goals: PluginGoalsClient;
+
+  /** Read subscription quota windows of company-shared AI accounts. Requires `costs.read`. */
+  costs: PluginCostsClient;
 
   /** Read and manage access memberships and invites. Requires `access.*` capabilities. */
   access: PluginAccessClient;
