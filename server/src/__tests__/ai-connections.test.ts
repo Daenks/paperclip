@@ -389,6 +389,24 @@ describe("managed AI connections", () => {
     await expectSelectionFailure(service.select({ ...input, userId: owner }), "ai_connection_unavailable");
   });
 
+  it("lists only company-shared subscription accounts for a caller with no user", async () => {
+    const owner = "shared-quota-owner";
+    await db.insert(companyMemberships).values({ companyId, principalId: owner, principalType: "user", status: "active", membershipRole: "member" });
+    const auth = (name: string) => JSON.stringify({ tokens: { account_id: name, access_token: "access", refresh_token: "refresh" } });
+    const subscription = (name: string, ownership: "personal" | "shared") => service.save(companyId, owner,
+      { provider: "openai", method: "subscription", ownership, name, loginSessionId: "fixture", agentIds: [], allAgents: true }, auth(name));
+    const shared = await subscription("shared-quota-subscription", "shared");
+    await subscription("personal-quota-subscription", "personal");
+    await create(owner, "shared-quota-api-key", "shared");
+    const names = ["shared-quota-subscription", "personal-quota-subscription", "shared-quota-api-key"];
+    const rows = (await service.sharedQuotaAccounts(companyId)).filter(row => names.includes(row.summary.name));
+    expect(rows.map(row => [row.summary.name, row.summary.provider, row.summary.status, row.grant.id]))
+      .toEqual([["shared-quota-subscription", "openai", "connected", shared.grantId]]);
+    await db.update(connectionGrants).set({ status: "revoked" }).where(eq(connectionGrants.id, shared.grantId));
+    const [revoked] = (await service.sharedQuotaAccounts(companyId)).filter(row => row.grant.id === shared.grantId);
+    expect(revoked.summary.status).toBe("revoked");
+  });
+
   it("commits one exchanged token without writable credential recovery storage", async () => {
     const owner = "quota-database-first";
     await db.insert(companyMemberships).values({ companyId, principalId: owner, principalType: "user", status: "active", membershipRole: "member" });

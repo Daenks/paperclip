@@ -420,6 +420,21 @@ describe("createHostClientHandlers capability gating for LOOA-641 methods", () =
 });
 
 
+describe("subscription quota reader", () => {
+  it("requires costs.read and the invocation company", async () => {
+    const context = { invocationScope: { companyId: "company-a" } };
+    const quotaWindows = vi.fn(async () => []);
+    const services = { costs: { quotaWindows } } as unknown as HostServices;
+    const denied = createHostClientHandlers({ pluginId: "paperclip.test", capabilities: [], services });
+    await expect(denied["costs.quotaWindows"]({ companyId: "company-a" }, context)).rejects.toBeInstanceOf(CapabilityDeniedError);
+    const handlers = createHostClientHandlers({ pluginId: "paperclip.test", capabilities: ["costs.read"], services });
+    await expect(handlers["costs.quotaWindows"]({ companyId: "company-b" }, context)).rejects.toBeInstanceOf(InvocationScopeDeniedError);
+    expect(quotaWindows).not.toHaveBeenCalled();
+    await expect(handlers["costs.quotaWindows"]({ companyId: "company-a" }, context)).resolves.toEqual([]);
+    expect(quotaWindows).toHaveBeenCalledWith({ companyId: "company-a" });
+  });
+});
+
 describe("agent runtime reader", () => {
   it.each(["getRuntime", "getRuntimeIdentity"] as const)("requires lifecycle capability and invocation company for %s", async method => {
     const getRuntime = vi.fn(async () => null);

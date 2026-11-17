@@ -734,6 +734,7 @@ Required SDK clients:
 - `ctx.issues`
 - `ctx.agents`
 - `ctx.goals`
+- `ctx.costs`
 - `ctx.data`
 - `ctx.actions`
 - `ctx.tools`
@@ -798,6 +799,27 @@ Scoped API routes:
   `{ status?, headers?, body? }`.
 - Only safe request headers are forwarded; auth/cookie headers are never passed
   to the worker.
+
+## 14.1.1 Subscription Quota Windows
+
+`ctx.costs.quotaWindows(companyId)` returns the current quota windows of the
+company's shared AI subscription accounts. It requires the `costs.read`
+capability.
+
+- The result holds one `ProviderQuotaResult` per account: `provider`,
+  `accountLabel`, `capturedAt`, `ok`, and `windows`. Each window has a `label`
+  (for example `5h`, `7d`), `usedPercent` (0-100 or `null`), `resetsAt` (ISO
+  timestamp or `null`) and `valueLabel` for credit-style windows.
+- Only company-shared subscription accounts are read. A plugin has no user, so
+  the personal accounts of company members are never returned.
+- When the company shares no subscription account, the result holds one
+  `ok: false` entry per supported provider with `errorFamily:
+  "credentials_unavailable"`. A failed read is also `ok: false`, with no
+  windows and a generic message; provider diagnostics are not passed on.
+- The set of windows belongs to the provider and can change. Read `windows` as
+  a list and do not assume a fixed pair.
+- The host caches each account for 30 seconds. The worker never receives the
+  account credential.
 
 ## 14.2 Example SDK Shape
 
